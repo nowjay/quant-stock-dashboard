@@ -1,5 +1,7 @@
 # QUANT — 주식 분석 대시보드 (Light)
 
+**🔗 배포 주소: https://nowjay.github.io/quant-stock-dashboard/** (모바일 대응)
+
 토스 스타일의 화이트 테마 주식 대시보드입니다. 관심종목 관리, TradingView Lightweight Charts 기반
 캔들·거래량·RSI·MACD 차트, 규칙 기반 기술적 분석과 단기/중기 전망을 한 화면에서 제공합니다.
 
