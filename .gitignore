@@ -1,0 +1,9 @@
+# 로컬 전용 시크릿 — 절대 커밋하지 말 것
+config.local.js
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# 프로젝트와 무관한 개인 파일
+무제.rtf

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QUANT 주식 대시보드</title>
+<meta name="description" content="관심종목 · 실시간 캔들 차트 · AI 기술적 분석 대시보드">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn menu-btn" id="menu-btn" aria-label="관심종목 열기"><i data-lucide="menu"></i></button>
+  <div class="logo"><span class="dot"><i data-lucide="candlestick-chart"></i></span>QUANT</div>
+  <div class="grow"></div>
+  <div class="feed-pill" id="feed-pill" data-mode="connecting"><span class="led"></span><span id="feed-text">연결 중</span></div>
+  <button class="icon-btn" id="settings-btn" aria-label="API 연결 설정"><i data-lucide="settings"></i></button>
+</header>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="app">
+  <!-- ==================== 사이드바 ==================== -->
+  <aside class="side" id="side">
+    <div class="card">
+      <div class="search">
+        <i data-lucide="search"></i>
+        <input id="q" type="search" placeholder="종목명 · 영문 · 코드 검색" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="tabs" id="tabs">
+        <button data-tab="watch" class="on">관심종목</button>
+        <button data-tab="all">전체종목</button>
+      </div>
+      <div class="wl" id="wl"></div>
+    </div>
+
+    <div class="card acct">
+      <div class="who">
+        <div class="av">이</div>
+        <div>
+          <b>이재웅님</b>
+          <span id="acct-state">모의 데이터 모드</span>
+        </div>
+      </div>
+      <div class="kv"><span>관심종목</span><b id="acct-count">0 종목</b></div>
+      <div class="kv"><span>데이터 소스</span><b id="acct-source">Mock Feed</b></div>
+      <div class="kv"><span>최근 수신</span><b id="acct-latency">—</b></div>
+      <button class="btn" id="connect-btn"><i data-lucide="plug-zap"></i>토스증권 API 연결</button>
+    </div>
+  </aside>
+
+  <!-- ==================== 메인 ==================== -->
+  <main class="main">
+    <section class="card">
+      <div class="quote">
+        <div class="idn">
+          <h1 id="q-name">—</h1>
+          <div class="meta">
+            <span class="code" id="q-code"></span>
+            <span class="chip" id="q-market"></span>
+            <span class="chip" id="q-sector"></span>
+          </div>
+        </div>
+        <div class="px">
+          <div class="now num" id="q-price">—</div>
+          <div class="dt num" id="q-delta">—</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div><span>시가</span><b class="num" id="s-open">—</b></div>
+        <div><span>고가</span><b class="num up" id="s-high">—</b></div>
+        <div><span>저가</span><b class="num down" id="s-low">—</b></div>
+        <div><span>거래량</span><b class="num" id="s-vol">—</b></div>
+        <div><span>52주 최고 · 최저</span><b class="num" id="s-52">—</b></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <div class="seg" id="tf-seg">
+          <button data-tf="1m">1분</button>
+          <button data-tf="5m">5분</button>
+          <button data-tf="1D" class="on">일</button>
+          <button data-tf="1W">주</button>
+          <button data-tf="1M">월</button>
+        </div>
+        <div class="sep"></div>
+        <div class="ind" id="ind-seg">
+          <button data-ind="ma" class="on" style="color:#3182F6"><span class="sw"></span>MA 20/50/200</button>
+          <button data-ind="bb" style="color:#8B95A1"><span class="sw"></span>볼린저</button>
+          <button data-ind="rsi" class="on" style="color:#F59E0B"><span class="sw"></span>RSI 14</button>
+          <button data-ind="macd" class="on" style="color:#7A5AF8"><span class="sw"></span>MACD</button>
+        </div>
+        <span class="hint-inline">⌘/Ctrl + 휠 확대 · 드래그 이동</span>
+      </div>
+      <div class="chart-legend" id="legend"></div>
+      <div class="chart-stack">
+        <div class="pane" id="pane-price"><div class="pane-tag" id="tag-price">가격 · 거래량</div></div>
+        <div class="pane" id="pane-rsi"><div class="pane-tag" id="tag-rsi">RSI (14)</div></div>
+        <div class="pane" id="pane-macd"><div class="pane-tag" id="tag-macd">MACD (12, 26, 9)</div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== 분석 패널 ==================== -->
+  <aside class="aside">
+    <section class="card gauge-card">
+      <div class="card-hd"><i data-lucide="gauge"></i><h2>종합 투자 의견</h2><span class="sub" id="basis">일봉 기준</span></div>
+      <div class="gauge">
+        <svg viewBox="0 0 264 150" role="img" aria-labelledby="gauge-title">
+          <title id="gauge-title">기술적 지표 종합 신호 게이지</title>
+          <g fill="none" stroke-width="14" stroke-linecap="round">
+            <path d="M26 128 A106 106 0 0 1 46.8 64.6" stroke="#3B82F6"/>
+            <path d="M52.5 57.6 A106 106 0 0 1 101.6 26.2" stroke="#93B9FB"/>
+            <path d="M110.4 23.2 A106 106 0 0 1 153.6 23.2" stroke="#D1D6DB"/>
+            <path d="M162.4 26.2 A106 106 0 0 1 211.5 57.6" stroke="#F8A29A"/>
+            <path d="M217.2 64.6 A106 106 0 0 1 238 128" stroke="#F04438"/>
+          </g>
+          <text x="24" y="146" fill="#B0B8C1" font-size="10" font-weight="700">강력매도</text>
+          <text x="198" y="146" fill="#B0B8C1" font-size="10" font-weight="700">강력매수</text>
+          <g id="g-needle" transform="rotate(0 132 128)">
+            <path d="M132 128 L128.4 120 L132 44 L135.6 120 Z" fill="#191F28"/>
+            <circle cx="132" cy="128" r="7.5" fill="#191F28"/>
+            <circle cx="132" cy="128" r="3" fill="#fff"/>
+          </g>
+        </svg>
+        <div class="verdict" id="verdict">—</div>
+        <div class="score-pill num" id="g-score">0</div>
+        <div class="why" id="verdict-why">—</div>
+        <div class="tally">
+          <div><span>매수</span><b class="up num" id="t-buy">0</b></div>
+          <div><span>중립</span><b class="flat num" id="t-neut">0</b></div>
+          <div><span>매도</span><b class="down num" id="t-sell">0</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hd"><i data-lucide="activity"></i><h2>핵심 지표 리포트</h2></div>
+      <div class="sig-list" id="signals"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-hd"><i data-lucide="align-horizontal-distribute-center"></i><h2>지지선 · 저항선</h2><span class="sub">피봇 포인트</span></div>
+      <div class="levels" id="levels"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-hd"><i data-lucide="sparkles"></i><h2>AI 주가 전망</h2><span class="sub" id="fc-updated">—</span></div>
+      <div class="forecast" id="forecast"></div>
+      <div class="note">
+        기술적 지표를 규칙 기반으로 계산한 참고 정보이며 투자 자문이 아닙니다. 목표가·손절가는 ATR(변동성)과 피봇 레벨로 산출한 수치로, 실제 매매 결과를 보장하지 않습니다.
+      </div>
+    </section>
+  </aside>
+</div>
+
+<!-- ==================== API 연결 모달 ==================== -->
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="box">
+    <h3 id="modal-title">실시간 시세 연결</h3>
+    <p class="lead">토스증권 Open API 또는 OpenAPI 표준(REST/WebSocket) 시세 서버에 연결합니다. 연결 전이거나 실패하면 모의 시세 생성기로 자동 전환됩니다.</p>
+    <div class="warn">
+      <i data-lucide="shield-alert"></i>
+      <span>브라우저에 저장한 토큰은 이 페이지를 여는 누구나 볼 수 있습니다. 실제 운영에서는 <b>프록시 주소</b>만 입력하고 토큰은 서버에 두세요.</span>
+    </div>
+    <div class="field">
+      <label for="f-provider">데이터 소스</label>
+      <select id="f-provider">
+        <option value="mock">모의 시세 (Random Walk)</option>
+        <option value="toss">토스증권 Open API</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="f-proxy">프록시 주소 (권장)</label>
+      <input id="f-proxy" type="text" placeholder="https://my-server.com/toss" autocomplete="off">
+      <div class="hint">서버가 토큰을 보관하고 시세만 중계하는 방식입니다. 입력하면 토큰 필드는 사용하지 않습니다.</div>
+    </div>
+    <div class="field">
+      <label for="f-token">액세스 토큰 (개발용)</label>
+      <input id="f-token" type="password" placeholder="tsck_live_..." autocomplete="off">
+      <div class="hint">이 브라우저에만 저장됩니다(localStorage). 공유 PC에서는 사용하지 마세요.</div>
+    </div>
+    <div class="field">
+      <label for="f-ws">실시간 WebSocket 주소 (선택)</label>
+      <input id="f-ws" type="text" placeholder="wss://... (미입력 시 REST 폴링)" autocomplete="off">
+    </div>
+    <div class="row">
+      <button class="ghost" id="m-cancel">취소</button>
+      <button class="primary" id="m-save">연결하기</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.544.0/dist/umd/lucide.min.js"></script>
+<script>
+  /* 로컬 개발 환경에서만 config.local.js 를 읽습니다 (배포본에는 시크릿을 두지 않습니다) */
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
+  }
+</script>
+<script src="assets/core/market-data.js"></script>
+<script src="assets/core/indicators.js"></script>
+<script src="assets/core/analysis.js"></script>
+<script src="assets/feed/mock.js"></script>
+<script src="assets/feed/toss.js"></script>
+<script src="assets/feed/index.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
