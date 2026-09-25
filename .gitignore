@@ -7,3 +7,5 @@ config.local.js
 
 # 프로젝트와 무관한 개인 파일
 무제.rtf
+__pycache__/
+*.pyc

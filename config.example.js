@@ -1,13 +1,23 @@
-/* 이 파일을 config.local.js 로 복사한 뒤 값을 채우세요. config.local.js 는 .gitignore 처리되어 있습니다.
-   ⚠️ 브라우저에서 직접 불러오는 키는 페이지를 여는 누구에게나 노출됩니다.
-      실제 서비스에서는 반드시 서버(프록시)에서 토큰을 보관하고 proxyBase 만 지정하세요. */
+/* config.local.js 로 복사해서 사용하세요 (.gitignore 처리됨, 배포본에는 포함되지 않습니다)
+   ⚠️ 브라우저에 두는 키는 페이지를 여는 누구에게나 노출됩니다.
+      운영 환경에서는 토큰을 서버에 두고 proxyBase / wsUrl(wss) 만 지정하세요. */
 window.QT_CONFIG = {
-  provider: 'mock',            // 'mock' | 'toss'  — 연동 실패 시 자동으로 mock 으로 폴백합니다
+  provider: 'mock',              // 'mock' | 'kis' | 'toss'  — 실패 시 자동으로 mock 폴백
+
+  // 한국투자증권 KIS — 실시간 체결가 WebSocket (H0STCNT0)
+  kis: {
+    approvalKey: '',             // POST /oauth2/Approval 로 발급한 실시간 접속키
+    proxyBase: '',               // 권장: 토큰을 보관하는 자체 프록시
+    wsUrl: '',                   // 비우면 ws://ops.koreainvestment.com:21000 (HTTPS 페이지에서는 wss 프록시 필요)
+    demo: false                  // true 면 모의투자 포트(31000)
+  },
+
+  // 토스증권 Open API
   toss: {
-    token: '',                 // tsck_live_... (개발용 임시 방식)
-    proxyBase: '',             // 권장: 'https://내서버/toss' 처럼 토큰을 숨긴 프록시 주소
+    token: '',
+    proxyBase: '',
     restBase: 'https://openapi.tossinvest.com',
-    wsUrl: '',                 // 실시간 WebSocket 공개 시 주소 입력 (미입력이면 REST 폴링)
-    pollMs: 2000               // REST 폴링 주기(ms)
+    wsUrl: '',                   // 비우면 REST 1초 폴링
+    pollMs: 1000
   }
 };

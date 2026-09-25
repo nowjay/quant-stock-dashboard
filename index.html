@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css">
+<link rel="stylesheet" href="assets/css/app.css?v=20260925d">
 </head>
 <body>
 
@@ -28,11 +28,20 @@
     <div class="card">
       <div class="search">
         <i data-lucide="search"></i>
-        <input id="q" type="search" placeholder="종목명 · 영문 · 코드 검색" autocomplete="off" spellcheck="false">
+        <input id="q" type="search" placeholder="종목명 · 초성 · 코드 검색 (예: ㅅㅅㅈㅈ)" autocomplete="off"
+               spellcheck="false" role="combobox" aria-expanded="false" aria-controls="ac" aria-autocomplete="list">
+        <div class="ac" id="ac" role="listbox" hidden></div>
       </div>
       <div class="tabs" id="tabs">
         <button data-tab="watch" class="on">관심종목</button>
-        <button data-tab="all">전체종목</button>
+        <button data-tab="all">시가총액 상위</button>
+      </div>
+      <div class="mkt" id="mkt" hidden>
+        <button data-mkt="ALL" class="on">전체</button>
+        <button data-mkt="KOSPI">코스피</button>
+        <button data-mkt="KOSDAQ">코스닥</button>
+        <button data-mkt="ETF">ETF</button>
+        <button data-mkt="US">미국</button>
       </div>
       <div class="wl" id="wl"></div>
     </div>
@@ -62,10 +71,12 @@
             <span class="code" id="q-code"></span>
             <span class="chip" id="q-market"></span>
             <span class="chip" id="q-sector"></span>
+            <span class="chip src" id="q-src"></span>
           </div>
         </div>
         <div class="px">
           <div class="now num" id="q-price">—</div>
+          <div class="fxline num" id="q-fx" hidden></div>
           <div class="dt num" id="q-delta">—</div>
         </div>
       </div>
@@ -97,8 +108,19 @@
         <span class="hint-inline">⌘/Ctrl + 휠 확대 · 드래그 이동</span>
       </div>
       <div class="chart-legend" id="legend"></div>
+      <div class="no-data" id="no-data" hidden>
+        <i data-lucide="database-zap"></i>
+        <b>시세 데이터가 아직 수집되지 않은 종목입니다</b>
+        <p>종목 마스터에는 포함돼 있지만 가격 데이터가 없어 차트를 그리지 않습니다.<br>
+           실시간 API(한국투자 KIS · 토스증권)를 연결하면 이 종목도 바로 표시됩니다.</p>
+      </div>
       <div class="chart-stack">
-        <div class="pane" id="pane-price"><div class="pane-tag" id="tag-price">가격 · 거래량</div></div>
+        <div class="pane" id="pane-price">
+          <div class="pane-tag" id="tag-price">가격 · 거래량</div>
+          <div class="live-tag" id="live-tag" data-mode="connecting">
+            <span class="led"></span><b id="live-tag-text">연결 중</b><em id="live-tag-time">--:--:--</em>
+          </div>
+        </div>
         <div class="pane" id="pane-rsi"><div class="pane-tag" id="tag-rsi">RSI (14)</div></div>
         <div class="pane" id="pane-macd"><div class="pane-tag" id="tag-macd">MACD (12, 26, 9)</div></div>
       </div>
@@ -107,6 +129,12 @@
 
   <!-- ==================== 분석 패널 ==================== -->
   <aside class="aside">
+    <nav class="pane-tabs card" id="side-tabs">
+      <button data-panel="analysis" class="on"><i data-lucide="brain-circuit"></i>AI 분석</button>
+      <button data-panel="events"><i data-lucide="calendar-days"></i>주요 일정</button>
+    </nav>
+
+    <div id="panel-analysis" class="panel-group">
     <section class="card gauge-card">
       <div class="card-hd"><i data-lucide="gauge"></i><h2>종합 투자 의견</h2><span class="sub" id="basis">일봉 기준</span></div>
       <div class="gauge">
@@ -155,6 +183,19 @@
         기술적 지표를 규칙 기반으로 계산한 참고 정보이며 투자 자문이 아닙니다. 목표가·손절가는 ATR(변동성)과 피봇 레벨로 산출한 수치로, 실제 매매 결과를 보장하지 않습니다.
       </div>
     </section>
+    </div>
+
+    <div id="panel-events" class="panel-group" hidden>
+      <section class="card">
+        <div class="card-hd"><i data-lucide="calendar-clock"></i><h2>종목 일정</h2><span class="sub" id="ev-symbol">—</span></div>
+        <div class="timeline" id="ev-symbol-list"></div>
+      </section>
+      <section class="card">
+        <div class="card-hd"><i data-lucide="landmark"></i><h2>증시 주요 일정</h2><span class="sub">FOMC · 만기일</span></div>
+        <div class="timeline" id="ev-market-list"></div>
+      </section>
+      <div class="note" id="ev-note"></div>
+    </div>
   </aside>
 </div>
 
@@ -171,6 +212,7 @@
       <label for="f-provider">데이터 소스</label>
       <select id="f-provider">
         <option value="mock">모의 시세 (Random Walk)</option>
+        <option value="kis">한국투자증권 KIS (WebSocket 체결가)</option>
         <option value="toss">토스증권 Open API</option>
       </select>
     </div>
@@ -180,13 +222,14 @@
       <div class="hint">서버가 토큰을 보관하고 시세만 중계하는 방식입니다. 입력하면 토큰 필드는 사용하지 않습니다.</div>
     </div>
     <div class="field">
-      <label for="f-token">액세스 토큰 (개발용)</label>
-      <input id="f-token" type="password" placeholder="tsck_live_..." autocomplete="off">
+      <label for="f-token">액세스 토큰 / approval_key (개발용)</label>
+      <input id="f-token" type="password" placeholder="tsck_live_... 또는 KIS approval_key" autocomplete="off">
       <div class="hint">이 브라우저에만 저장됩니다(localStorage). 공유 PC에서는 사용하지 마세요.</div>
     </div>
     <div class="field">
       <label for="f-ws">실시간 WebSocket 주소 (선택)</label>
-      <input id="f-ws" type="text" placeholder="wss://... (미입력 시 REST 폴링)" autocomplete="off">
+      <input id="f-ws" type="text" placeholder="wss://... (미입력 시 REST 1초 폴링)" autocomplete="off">
+      <div class="hint">KIS 실시간은 ws://ops.koreainvestment.com:21000 이지만, HTTPS 페이지에서는 wss:// 프록시가 필요합니다.</div>
     </div>
     <div class="row">
       <button class="ghost" id="m-cancel">취소</button>
@@ -203,12 +246,16 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/market-data.js"></script>
-<script src="assets/core/indicators.js"></script>
-<script src="assets/core/analysis.js"></script>
-<script src="assets/feed/mock.js"></script>
-<script src="assets/feed/toss.js"></script>
-<script src="assets/feed/index.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/core/fx.js?v=20260925d"></script>
+<script src="assets/core/search.js?v=20260925d"></script>
+<script src="assets/core/events.js?v=20260925d"></script>
+<script src="assets/core/market-data.js?v=20260925d"></script>
+<script src="assets/core/indicators.js?v=20260925d"></script>
+<script src="assets/core/analysis.js?v=20260925d"></script>
+<script src="assets/feed/mock.js?v=20260925d"></script>
+<script src="assets/feed/kis.js?v=20260925d"></script>
+<script src="assets/feed/toss.js?v=20260925d"></script>
+<script src="assets/feed/index.js?v=20260925d"></script>
+<script src="assets/app.js?v=20260925d"></script>
 </body>
 </html>

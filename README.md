@@ -1,102 +1,96 @@
-# QUANT — 주식 분석 대시보드 (Light)
+# QUANT — 주식 분석 대시보드
 
 **🔗 배포 주소: https://nowjay.github.io/quant-stock-dashboard/** (모바일 대응)
 
-토스 스타일의 화이트 테마 주식 대시보드입니다. 관심종목 관리, TradingView Lightweight Charts 기반
-캔들·거래량·RSI·MACD 차트, 규칙 기반 기술적 분석과 단기/중기 전망을 한 화면에서 제공합니다.
+관심종목 · 실시간 차트 · 기술적 분석 · 증시 일정을 한 화면에서 보는 라이트 테마 대시보드입니다.
 
 ```bash
-python3 -m http.server 8777   # 프로젝트 폴더에서 실행 후 http://localhost:8777
+python3 -m http.server 8777    # 프로젝트 폴더에서 실행 후 http://localhost:8777
 ```
 
-> 모듈을 `<script src>`로 나눠 두었기 때문에 `file://`로 직접 열지 말고 위처럼 로컬 서버로 열어 주세요.
+> 모듈이 `<script src>`로 분리돼 있어 `file://`이 아닌 로컬 서버로 열어야 합니다.
+
+## 데이터 출처 (중요)
+
+| 항목 | 출처 | 성격 |
+|---|---|---|
+| 국내 전종목 · ETF 마스터 | 네이버 금융 | **실제** (KOSPI 2,484 · KOSDAQ 1,821 · ETF 1,175) |
+| 미국 종목 마스터 | Wikipedia S&P 500 / NASDAQ-100 | **실제** |
+| 국내 종목 현재가·등락률 | 네이버 금융 | **실제** (수집 시점 종가) |
+| 대표 종목 일봉 | 네이버 금융 / Yahoo Finance | **실제** (2년치) |
+| 그 외 종목의 과거 경로 | 시뮬레이션 | 최근 종가는 실제, **경로만 생성** → 화면에 `시뮬레이션 경로` 배지 |
+| 분봉(1·5분) | 일봉에서 파생 | 시뮬레이션 (실시간 API 연결 시 실제 체결로 대체) |
+| USD/KRW 환율 | frankfurter.dev → open.er-api.com | **실제**, 10분마다 갱신 |
+| FOMC 일정 | federalreserve.gov | **실제 확정** |
+| 미국 배당락·배당금 | Yahoo Finance | **실제 이력** |
+| 실적발표일·주주총회·배당락(국내) | 과거 패턴 기반 추정 | `예상` 배지 표기 |
+
+데이터는 `tools/build_dataset.py`, `tools/build_us.py`, `tools/build_events.py`로 언제든 재수집할 수 있습니다.
+
+```bash
+python3 tools/build_dataset.py      # 국내 전종목 + 대표 일봉
+python3 tools/build_us.py           # 미국 종목 보강 + 대표 일봉
+python3 tools/build_events.py       # FOMC · 배당 · 컨센서스
+```
+
+## 기능
+
+### 1. 통화 표기 · 원화 환산
+국내 종목은 `286,500원`, 미국 종목은 `$335.92` 로 통화를 명시합니다.
+미국 종목은 현재 환율로 환산한 `≈ 459,800원 · $1 = 1,369원`을 함께 보여줍니다(환율 출처·기준일은 툴팁).
+
+### 2. 실시간 시세
+연결 우선순위는 **WebSocket → REST 1초 폴링 → 모의 시세**입니다.
+
+- `assets/feed/kis.js` — 한국투자증권 KIS 실시간 체결가(`H0STCNT0`) 파서, PINGPONG 응답, 지수 백오프 재연결(최대 5회)
+- `assets/feed/toss.js` — 토스증권 Open API (WebSocket 또는 REST 폴링)
+- `assets/feed/mock.js` — 랜덤워크 모의 시세 (연동 전/실패 시 자동 전환)
+- `assets/feed/index.js` — 위 셋을 고르고 폴백하는 파사드. 15초간 체결이 없으면 워치독이 재연결
+
+차트 우상단에 **`🟢 실시간 수신 중 · 14:03:21`** 배지로 상태와 마지막 수신 시각을 표시합니다.
+
+> ⚠️ 브라우저에서 증권사 API를 직접 호출하면 CORS로 차단되고, HTTPS 페이지에서는 `ws://`도 차단됩니다.
+> 실거래 연동에는 토큰을 보관하고 `wss://`로 중계하는 **프록시 서버가 필요**합니다.
+
+### 3. 주요 일정 (Events & Earnings)
+우측 패널 `주요 일정` 탭에서 선택 종목의 실적 발표, 분기·사업보고서 제출기한, 배당락일, 정기 주주총회,
+미국 종목의 실제 배당 이력·액면분할을 타임라인으로 보여줍니다. 아래에는 FOMC 정례회의와
+지수 옵션/동시 만기일 등 증시 공통 일정이 표시되며, 각 항목에 `확정 / 규칙 / 예상` 배지가 붙습니다.
+국내 종목은 네이버 컨센서스(목표주가·투자의견)도 함께 표시합니다.
+
+### 4. 검색 · 자동완성
+`assets/core/search.js` 가 **한글명 · 영문명 · 종목코드 · 초성**을 모두 인덱싱합니다.
+
+- `ㅅㅅㅈㅈ` → 삼성전자, `ㅋㅋㅇㅂㅋ` → 카카오뱅크
+- `005930`, `AAPL`, `hynix` 모두 매칭
+- 입력 즉시 드롭다운이 열리고 `↑↓` 이동, `Enter` 선택, `Esc` 닫기
+
+### 기술적 분석
+12개 지표(이동평균 6 + 오실레이터 6) 종합 점수 게이지, 골든/데드크로스, RSI 과매수·과매도,
+MACD 시그널 교차, 피봇 기준 지지·저항 2단계, 단기(1~2주)·중기(1~3개월) 전망과 목표가·손절가·손익비를 제공합니다.
 
 ## 구성
 
 ```
-index.html                  화면 마크업
-assets/css/app.css          라이트 테마 토큰 및 레이아웃
-assets/core/market-data.js  종목 유니버스 · 히스토리 · 봉 집계 · 틱 반영
-assets/core/indicators.js   SMA/EMA/볼린저/RSI/MACD/Stoch/CCI/Williams/ATR
-assets/core/analysis.js     종합 점수 · 크로스 · 피봇 · 목표가/손절가 · 전망 문장
-assets/feed/mock.js         모의 실시간 시세 생성기 (Random Walk)
-assets/feed/toss.js         토스증권 Open API 어댑터 (WebSocket / REST 폴링)
-assets/feed/index.js        MarketFeed 파사드 (provider 선택 · 자동 폴백)
-assets/app.js               사이드바 · 차트 · 분석 패널 렌더링
-config.example.js           설정 템플릿 (복사해서 config.local.js 로 사용)
-legacy/terminal-dark.html   이전 다크 터미널 버전 (단일 파일)
+index.html                     화면 마크업
+assets/css/app.css             라이트 테마 토큰 · 레이아웃
+assets/core/market-data.js     종목 마스터 · 시세 · 봉 집계 · 틱 반영
+assets/core/indicators.js      SMA/EMA/볼린저/RSI/MACD/Stoch/CCI/Williams/ATR
+assets/core/analysis.js        종합 점수 · 크로스 · 피봇 · 목표가 · 전망
+assets/core/search.js          초성 포함 검색 인덱스
+assets/core/events.js          일정 생성/병합 (확정·규칙·예상)
+assets/core/fx.js              USD/KRW 환율
+assets/feed/{kis,toss,mock,index}.js   실시간 피드 어댑터와 파사드
+assets/data/*.json             수집된 종목·시세·일봉·일정 데이터
+tools/build_*.py               데이터 수집 스크립트
+legacy/terminal-dark.html      초기 다크 터미널 버전
 ```
 
-## 디자인 토큰
+## 설정
 
-| 용도 | 값 |
-|---|---|
-| 페이지 배경 / 카드 | `#F9FAFB` / `#FFFFFF` |
-| 구분선 | `#F3F4F6` (보조 `#E5E7EB`) |
-| 그림자 | `0 1px 3px rgba(0,0,0,.05)` |
-| 포인트 | 토스 블루 `#3182F6` |
-| 상승 / 하락 | `#F04438` / `#3B82F6` (한국 시장 표준) |
-| 서체 | Gothic A1 (UI) · IBM Plex Mono (코드·수치 라벨) · Lucide Icons |
+우상단 톱니 → **실시간 시세 연결**에서 데이터 소스(모의 / KIS / 토스), 프록시 주소, 토큰, WebSocket 주소를
+설정합니다(브라우저 localStorage 저장). 로컬 개발에서는 `config.local.js`(gitignore)로도 지정할 수 있습니다.
 
-## 실시간 시세 연동
+## 면책
 
-데이터 소스는 `MarketFeed` 파사드 하나로 추상화되어 있고, 연결 실패 시 자동으로 모의 시세로 폴백합니다.
-
-```
-WebSocket(wsUrl 설정 시) → REST 폴링(pollMs) → Mock Feed
-```
-
-설정 방법은 두 가지입니다.
-
-1. **화면 우상단 톱니 → 실시간 시세 연결** — 브라우저(localStorage)에 저장됩니다.
-2. **`config.local.js`** — `config.example.js`를 복사해 값을 채웁니다. 이 파일은 `.gitignore`에 등록되어 있습니다.
-
-```js
-window.QT_CONFIG = {
-  provider: 'toss',
-  toss: {
-    proxyBase: 'https://my-server.com/toss',  // 권장: 서버가 토큰 보관
-    token: '',                                 // 개발용 직접 입력 (비권장)
-    restBase: 'https://openapi.tossinvest.com',
-    wsUrl: '',                                 // 실시간 WS 공개 시 입력
-    pollMs: 2000
-  }
-};
-```
-
-### ⚠️ 토큰 취급 주의
-
-- **브라우저에서 증권사 API를 직접 호출하면 CORS로 차단됩니다.** 실제 연동에는 토큰을 보관하고 시세만
-  중계하는 **프록시 서버가 반드시 필요**합니다(`proxyBase`).
-- 프런트엔드에 넣은 토큰은 페이지를 여는 누구나 볼 수 있습니다. 배포본·아티팩트에는 토큰을 포함하지 않았습니다.
-- 채팅·저장소 등에 노출된 키는 **재발급(rotate)** 을 권장합니다.
-- 토스증권 Open API는 2026년 8월 정식 오픈했으나 **실시간 WebSocket은 일반 공개 전**이라, 현재는 REST 폴링이 기본값입니다.
-
-### 응답 스키마 흡수
-
-`toss.js`의 `normalize()`가 대표적인 필드명(`code|symbol|isuSrtCd`, `price|closePrice|trdPrc` 등)을 흡수합니다.
-엔드포인트 경로는 파일 상단 `ENDPOINTS` 상수에서 기관 문서에 맞게 바꿔 주세요.
-
-```js
-// 시세 틱 정규화 결과
-{ code: '005930', price: 78600, volume: 1200, ts: 1758... }
-```
-
-과거 봉을 실데이터로 바꾸려면 `QT.Market.loadHistory(st)`를 `TossFeed.fetchCandles(code, interval, count)`
-결과(`[{t,o,h,l,c,v}]`)로 대체하면 됩니다. 주/월/5분봉은 `aggregate()`가 자동 집계합니다.
-
-## 분석 로직 요약
-
-- **종합 점수** — 이동평균 6종 + 오실레이터 6종(RSI·Stoch·MACD·CCI·Williams %R·모멘텀)의 매수/매도 판정을
-  합산하고, 정배열·역배열(±10)과 MACD 히스토그램 방향(±5)을 가중해 -100 ~ +100으로 산출합니다.
-  `+55↑ 강력 매수 / +18↑ 매수 / ±18 중립 / -18↓ 매도 / -55↓ 강력 매도`
-- **크로스** — SMA 20↔50(최근 60봉), 50↔200(최근 120봉), MACD↔시그널(최근 40봉)
-- **피봇 포인트** — 직전 봉 기준 클래식: `P=(H+L+C)/3`, `R1=2P−L`, `S1=2P−H`, `R2=P+(H−L)`, `S2=P−(H−L)`
-- **목표가 / 손절가** — 피봇 레벨과 최근 20·60봉 고저를 후보로 두고 ATR(14) 배수 범위 안에 있는 값을 채택,
-  없으면 `현재가 ± ATR×배수`로 대체합니다. 손익비도 함께 표시합니다.
-- **예상 등락 범위** — 최근 60봉 일간 수익률 표준편차 σ에 √10(2주) · √45(2개월)을 적용한 값입니다.
-
-## 데이터에 대한 안내
-
-API 미연동 상태의 시세는 종목코드를 시드로 생성한 **시뮬레이션 데이터**이며 실제 시장가와 무관합니다
-(상단 배지에 `모의 시세`로 표시). 모든 지표·전망은 과거 가격의 수학적 계산 결과이며 투자 자문이 아닙니다.
+모든 지표·전망·목표가는 과거 가격의 수학적 계산 결과이며 투자 자문이 아닙니다. 투자 판단과 책임은 이용자 본인에게 있습니다.
