@@ -13,13 +13,13 @@ from urllib.parse import quote
 UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36'
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'data')
 
-def get(url, tries=3, timeout=15):
+def get(url, tries=3, timeout=15, charset='utf-8'):
     """macOS 파이썬에 CA 번들이 없는 경우가 많아 curl 로 받아온다."""
     for i in range(tries):
         try:
             r = subprocess.run(['curl', '-sL', '-m', str(timeout), '-A', UA, url],
                                capture_output=True, timeout=timeout + 5)
-            body = r.stdout.decode('utf-8', 'replace')
+            body = r.stdout.decode(charset, 'replace')
             if r.returncode == 0 and body.strip() and 'Too Many Requests' not in body[:64]:
                 return body
             if 'Too Many Requests' in body[:64]:
@@ -62,7 +62,8 @@ def kr_market(market):
     return out
 
 def kr_etf():
-    raw = get('https://finance.naver.com/api/sise/etfItemList.nhn')
+    # 네이버 ETF 목록은 EUC-KR(cp949) 로 내려온다
+    raw = get('https://finance.naver.com/api/sise/etfItemList.nhn', charset='cp949')
     if not raw: return []
     d = json.loads(raw)
     out = []
