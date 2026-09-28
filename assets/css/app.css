@@ -239,30 +239,6 @@ input{font-family:inherit}
 .lv.now{background:var(--blue-weak);border-radius:9px;padding:7px 6px;margin:2px -6px}
 .lv.now + .lv{border-top:none}
 
-.forecast{padding:12px 16px 16px;display:flex;flex-direction:column;gap:10px}
-.fc{border:1px solid var(--hair);border-radius:13px;padding:12px 13px}
-.fc .hd{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700}
-.fc .hd .term{
-  font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--hair);color:var(--ink-2);
-}
-.fc .hd .dirn{margin-left:auto;font-size:12px;font-weight:800;display:flex;align-items:center;gap:4px}
-.fc .hd .dirn [data-lucide]{width:14px;height:14px}
-.fc p{margin:7px 0 0;font-size:12.5px;line-height:1.7;color:var(--ink-2)}
-.fc .band{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11.5px;color:var(--muted)}
-.fc .band b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
-.targets{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:2px}
-.tg{border-radius:13px;padding:12px 13px}
-.tg.buy{background:var(--up-weak)}
-.tg.stop{background:var(--down-weak)}
-.tg span{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700}
-.tg.buy span{color:var(--up)} .tg.stop span{color:var(--down)}
-.tg b{display:block;font-size:17px;font-weight:800;letter-spacing:-.03em;margin-top:5px;font-variant-numeric:tabular-nums}
-.tg small{display:block;font-size:11px;color:var(--ink-2);margin-top:2px}
-.rr{
-  display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:10px 12px;
-  border-radius:11px;background:var(--ground);font-size:12px;color:var(--ink-2);
-}
-.rr b{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
 .note{padding:0 16px 16px;font-size:11px;color:var(--muted);line-height:1.65}
 
 /* ---------- 모달 ---------- */
@@ -323,7 +299,6 @@ input{font-family:inherit}
   .stats div:nth-child(5){grid-column:1/-1;border-radius:0 0 var(--r) var(--r)}
   .stats div:nth-child(4){border-bottom-left-radius:0}
   .quote .px .now{font-size:27px}
-  .targets{grid-template-columns:1fr}
   .feed-pill span:not(.led){display:none}
   .feed-pill{padding:0 10px}
 }
@@ -414,11 +389,6 @@ input{font-family:inherit}
   background:var(--ground);color:var(--ink-2);
 }
 .tl .ic [data-lucide]{width:14px;height:14px}
-.tl[data-kind="earnings"] .ic{background:var(--blue-weak);color:var(--blue-ink)}
-.tl[data-kind="dividend"] .ic,.tl[data-kind="dividend-past"] .ic{background:#ECFDF3;color:#027A48}
-.tl[data-kind="macro"] .ic{background:var(--amber-weak);color:#B54708}
-.tl[data-kind="expiry"] .ic{background:var(--up-weak);color:var(--up)}
-.tl[data-kind="split"] .ic{background:#F4F0FF;color:#6938EF}
 .status-chip{
   font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:auto;white-space:nowrap;
   background:var(--hair);color:var(--muted);
@@ -441,3 +411,266 @@ input{font-family:inherit}
 .no-data [data-lucide]{width:28px;height:28px;color:var(--faint);margin-bottom:10px}
 .no-data b{display:block;font-size:14px;color:var(--ink);margin-bottom:6px}
 .no-data p{margin:0;font-size:12.5px;line-height:1.7}
+
+/* ============================================================
+   AI 목표주가 — 단기 / 중장기 · Bear / Base / Bull
+   ============================================================ */
+.tgt{padding:12px 16px 14px;display:flex;flex-direction:column;gap:12px}
+.hz{border:1px solid var(--hair);border-radius:14px;padding:13px 13px 12px}
+.hz-hd{display:flex;align-items:center;gap:7px;font-size:13px}
+.hz-hd b{font-weight:800;letter-spacing:-.02em}
+.term{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--hair);color:var(--ink-2)}
+.dirn{margin-left:auto;font-size:12px;font-weight:800;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.dirn [data-lucide]{width:14px;height:14px}
+.hz-main{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;margin-top:10px}
+.hz-main span{font-size:11.5px;color:var(--muted);font-weight:600;width:100%}
+.hz-main b{font-size:24px;font-weight:800;letter-spacing:-.04em;line-height:1.15}
+.hz-main em{font-style:normal;font-size:14px;font-weight:800}
+.hz-main small{font-size:11.5px;color:var(--muted);font-weight:600}
+
+.ladder{margin:24px 2px 2px}
+.ladder .bar{position:relative;height:6px;border-radius:3px;background:var(--hair)}
+.ladder .bar i{position:absolute;top:0;bottom:0;border-radius:3px}
+.ladder .risk{background:#C7DBFD}
+.ladder .gain{background:linear-gradient(90deg,#FDD5D1,#F97066)}
+.ladder .mk{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.ladder .mk.stop{background:var(--down)}
+.ladder .mk.bear{background:#FDA29B}
+.ladder .mk.base{background:var(--up);width:13px;height:13px;margin:-6.5px 0 0 -6.5px}
+.ladder .mk.bull{background:#B42318}
+.ladder .mk.now{width:2px;height:16px;margin:-8px 0 0 -1px;border:none;border-radius:1px;background:var(--ink);box-shadow:none}
+.ladder .mk.now em{
+  position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font-style:normal;
+  font-size:9.5px;font-weight:800;color:var(--ink);white-space:nowrap;
+}
+.ladder .ends{display:flex;justify-content:space-between;margin-top:7px;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums}
+
+.scn{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px}
+.sc{background:var(--ground);border-radius:11px;padding:9px 9px 8px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.sc.base{background:var(--up-weak);box-shadow:inset 0 0 0 1.5px rgba(240,68,56,.35)}
+.sc .nm{font-size:11px;font-weight:700;color:var(--ink-2)}
+.sc .nm em{font-style:normal;font-weight:600;color:var(--muted);font-size:10px}
+.sc.base .nm{color:var(--up)}
+.sc b{font-size:13.5px;font-weight:800;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc .upside{font-size:12px;font-weight:800}
+.sc .basis{
+  font-size:10.5px;color:var(--ink-2);line-height:1.4;margin-top:2px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.sc .prob{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hz-txt{margin:10px 0 0;font-size:12px;line-height:1.7;color:var(--ink-2)}
+.hz-foot{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;
+  border-radius:10px;background:var(--ground);font-size:12px;color:var(--ink-2);flex-wrap:wrap;
+}
+.hz-foot span{display:inline-flex;align-items:center;gap:5px}
+.hz-foot [data-lucide]{width:13px;height:13px;color:var(--down)}
+.hz-foot b{color:var(--ink);font-weight:800}
+.hz-foot em{font-style:normal;font-weight:700}
+.tgt-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--muted);padding:0 2px}
+.tgt-meta b{color:var(--ink-2);font-weight:700}
+
+/* ---------- 목표주가 산정 근거 ---------- */
+.why-card{padding:6px 16px 14px}
+.rs-sec{padding:10px 0 4px}
+.rs-sec + .rs-sec{border-top:1px solid var(--hair)}
+.rs-hd{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+.rs-hd .no{font-size:15px;color:var(--blue);font-weight:700;line-height:1}
+.rs-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.rs-list li{
+  position:relative;padding:8px 10px 8px 13px;border-radius:10px;background:var(--ground);
+  font-size:12px;line-height:1.65;color:var(--ink-2);
+}
+.rs-list li::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--faint)}
+.rs-list li.bull::before{background:var(--up)}
+.rs-list li.bear::before{background:var(--down)}
+.rs-list li.caution::before{background:var(--amber)}
+.rs-list li b{color:var(--ink);font-weight:700}
+.rs-list.risk li.caution{background:var(--amber-weak)}
+.osc{display:flex;flex-direction:column;gap:6px}
+.os{padding:8px 10px;border-radius:10px;background:var(--ground)}
+.os-hd{display:flex;align-items:center;gap:6px;font-size:12px}
+.os-hd b{font-weight:700}
+.os-hd em{
+  margin-left:auto;font-style:normal;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;
+  background:#fff;box-shadow:var(--shadow);white-space:nowrap;color:var(--ink-2);
+}
+.os.bull .os-hd em{color:var(--up)} .os.bear .os-hd em{color:var(--down)} .os.caution .os-hd em{color:#B54708}
+.os p{margin:4px 0 0;font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+.os p b{color:var(--ink)}
+.stops{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stp{background:var(--down-weak);border-radius:11px;padding:9px 10px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.stp span{font-size:10.5px;font-weight:700;color:var(--down)}
+.stp b{font-size:15px;font-weight:800;letter-spacing:-.03em;margin-top:2px}
+.stp em{font-style:normal;font-size:11.5px;font-weight:700}
+.stp small{font-size:10.5px;color:var(--ink-2);line-height:1.4;margin-top:2px}
+.sups{margin-top:8px;display:flex;flex-direction:column}
+.sup{display:grid;grid-template-columns:auto auto auto 1fr;align-items:center;gap:8px;padding:7px 2px;font-size:12px}
+.sup + .sup{border-top:1px solid var(--hair)}
+.sup .tag{font-size:10.5px;font-weight:700;color:var(--down);background:var(--down-weak);border-radius:6px;padding:2px 6px}
+.sup b{font-weight:800}
+.sup em{font-style:normal;font-weight:700;font-size:11.5px}
+.sup small{color:var(--muted);font-size:10.5px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rs-sec .rs-list.risk{margin-top:8px}
+.why-card .consensus{margin:10px 0 2px}
+.consensus em{font-style:normal;font-weight:700}
+.consensus .asof{color:var(--faint)}
+
+/* ============================================================
+   글로벌 매크로 패널
+   ============================================================ */
+.chips{display:flex;gap:5px;flex-wrap:wrap;padding:10px 16px 2px}
+.chips button{
+  height:27px;padding:0 10px;border-radius:999px;font-size:11.5px;font-weight:700;
+  color:var(--muted);background:var(--hair);white-space:nowrap;
+}
+.chips button:hover{color:var(--ink-2)}
+.chips button.on{background:var(--ink);color:#fff}
+.more{
+  display:block;width:calc(100% - 32px);margin:0 16px 14px;height:34px;border-radius:10px;
+  background:var(--ground);font-size:12px;font-weight:700;color:var(--ink-2);
+}
+.more:hover{background:var(--hair)}
+
+/* 다음 핵심 이벤트 */
+.mc-hero{
+  padding:16px;color:#fff;border:none;
+  background:linear-gradient(140deg,#3182F6 0%,#1B64DA 58%,#1848A8 100%);
+  box-shadow:0 6px 20px rgba(27,100,218,.25);
+}
+.hero-top{display:flex;align-items:center;gap:8px}
+.eyebrow{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;opacity:.9}
+.eyebrow [data-lucide]{width:14px;height:14px}
+.mc-hero .status-chip{background:rgba(255,255,255,.18)!important;color:#fff!important}
+.hero-title{margin:10px 0 0;font-size:17px;font-weight:800;letter-spacing:-.03em;line-height:1.35;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.mc-hero .cty{background:rgba(255,255,255,.2);color:#fff}
+.hero-when{margin-top:4px;font-size:12.5px;opacity:.92;display:flex;align-items:center;gap:7px}
+.hero-when b{font-family:var(--mono);font-size:11.5px;background:#fff;color:var(--blue-ink);border-radius:6px;padding:1px 6px}
+.cd{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
+.cd > div{background:rgba(255,255,255,.14);border-radius:11px;padding:8px 4px 6px;text-align:center}
+.cd b{display:block;font-size:22px;font-weight:800;letter-spacing:-.02em;font-family:var(--mono);line-height:1.1}
+.cd span{font-size:10.5px;opacity:.85;font-weight:600}
+.cd-done{grid-column:1/-1;font-size:12.5px;font-weight:700;padding:8px 0}
+.hero-why{margin:11px 0 0;font-size:12px;line-height:1.65;opacity:.92}
+.hero-next{margin-top:12px;display:flex;flex-direction:column;gap:4px;border-top:1px solid rgba(255,255,255,.18);padding-top:10px}
+.hero-next div{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:8px;font-size:12px}
+.hero-next em{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:700;background:rgba(255,255,255,.16);border-radius:6px;text-align:center;padding:2px 0}
+.hero-next span{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero-next small{font-size:11px;opacity:.85;white-space:nowrap}
+
+/* 매크로 타임라인 보강 */
+.tl .when .imp{display:flex;justify-content:center;gap:3px;margin-top:5px}
+.imp i{width:5px;height:5px;border-radius:50%;background:var(--line)}
+.imp i.on{background:var(--amber)}
+.tl .body b .tt{min-width:0}
+.tl .body p .tm{font-weight:800;color:var(--ink);display:inline;font-size:11.5px}
+.tl .body p.why{color:var(--muted);font-size:11px;margin-top:3px}
+.cty{
+  display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;margin-right:5px;
+  font-size:10px;font-weight:800;background:var(--blue-weak);color:var(--blue-ink);vertical-align:1px;
+}
+.cty[data-c="KR"]{background:var(--up-weak);color:#D92D20}
+.tl[data-kind="rate"] .ic{background:var(--amber-weak);color:#B54708}
+.tl[data-kind="inflation"] .ic{background:var(--up-weak);color:var(--up)}
+.tl[data-kind="jobs"] .ic{background:var(--blue-weak);color:var(--blue-ink)}
+.tl[data-kind="expiry"] .ic{background:#F4F0FF;color:#6938EF}
+.tl.soon .dd{background:var(--up-weak);color:var(--up)}
+
+/* 실적 시즌 캘린더 */
+.earn{padding:4px 12px 12px}
+.wk{padding:6px 0}
+.wk + .wk{border-top:1px solid var(--hair)}
+.wk-hd{display:flex;align-items:baseline;gap:7px;padding:6px 4px 4px;font-size:12.5px}
+.wk-hd b{font-weight:800;letter-spacing:-.02em}
+.wk-hd span{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.wk-hd em{margin-left:auto;font-style:normal;font-size:10.5px;color:var(--muted);font-weight:700}
+.er{
+  display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;
+  padding:8px 6px;border-radius:11px;text-align:left;font:inherit;color:inherit;
+}
+button.er:hover{background:var(--ground)}
+.er.on{background:var(--blue-weak)}
+.er.past{opacity:.55}
+.er-d{text-align:center;background:var(--ground);border-radius:9px;padding:4px 0}
+.er.on .er-d{background:#fff}
+.er-d b{display:block;font-size:12px;font-weight:800;letter-spacing:-.02em}
+.er-d small{font-size:10px;color:var(--muted);font-weight:700}
+.er-n{min-width:0}
+.er-n b{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;overflow:hidden}
+.er-n b .code{color:var(--faint);font-weight:500}
+.er-n small{display:block;font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.er-n .mine{width:12px;height:12px;color:var(--amber);fill:var(--amber);flex:none}
+.er-r{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.er-r .dd{
+  font-style:normal;font-size:10.5px;font-weight:800;font-family:var(--mono);color:var(--blue-ink);
+  background:var(--blue-weak);border-radius:6px;padding:2px 6px;
+}
+.er-r .dd.soon{background:var(--up-weak);color:var(--up)}
+.er-r small{font-size:10.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.er-r .status-chip{margin-left:0;font-size:9px;padding:1px 5px}
+.er-top{display:flex;align-items:center;gap:4px}
+.er-n small.tag{color:var(--faint);font-size:10.5px}
+
+/* 증시 뉴스 */
+.icon-btn.sm{width:28px;height:28px;border-radius:8px;margin:-4px -4px -4px 4px}
+.icon-btn.sm [data-lucide]{width:14px;height:14px}
+.icon-btn.spin [data-lucide]{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.news-state{display:inline-flex;align-items:center;gap:5px}
+.news-state::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.news-state[data-mode="live"]{color:#027A48}
+.news-state[data-mode="live"]::before{background:var(--green);animation:blink 1.8s infinite}
+.news-state[data-mode="snapshot"]::before{background:var(--amber)}
+.news-state[data-mode="error"]{color:var(--up)}
+.news-state[data-mode="error"]::before{background:var(--up)}
+.news-state[data-mode="loading"]::before{background:var(--blue);animation:blink .9s infinite}
+.news{padding:10px 16px 16px;display:flex;flex-direction:column;gap:8px}
+.nw{
+  display:block;padding:11px 12px;border-radius:12px;border:1px solid var(--hair);
+  color:inherit;text-decoration:none;transition:box-shadow .15s,border-color .15s;
+}
+a.nw:hover{border-color:var(--line);box-shadow:var(--shadow-md)}
+.nw-top{display:flex;align-items:center;gap:7px;font-size:11px}
+.nw-top .cat{font-weight:800;font-size:10.5px;padding:2px 7px;border-radius:6px;background:var(--hair);color:var(--ink-2)}
+.nw-top .cat[data-c="rate"]{background:var(--amber-weak);color:#B54708}
+.nw-top .cat[data-c="earn"]{background:var(--blue-weak);color:var(--blue-ink)}
+.nw-top .cat[data-c="market"]{background:#ECFDF3;color:#027A48}
+.nw-top .src{color:var(--muted);margin-left:auto;white-space:nowrap}
+.nw b{
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-top:6px;font-size:13px;font-weight:700;letter-spacing:-.02em;line-height:1.45;
+}
+.nw p{
+  margin:4px 0 0;font-size:11.5px;color:var(--ink-2);line-height:1.55;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.news .empty code{font-family:var(--mono);font-size:11px;background:var(--hair);border-radius:4px;padding:1px 4px}
+
+/* 설정 모달 — 구분선 */
+.field-sep{font-size:11px;font-weight:800;color:var(--muted);margin:16px 0 10px;padding-top:12px;border-top:1px solid var(--hair)}
+.modal .box{max-height:calc(100vh - 40px);overflow-y:auto}
+
+/* ---------- 반응형: 900~1280px 에서 우측 패널을 전체 폭 2열로 ---------- */
+@media (max-width:1280px){
+  .aside{display:flex;align-items:stretch}
+  .panel-group{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  .panel-group > .gauge-card,.panel-group > .tgt-card,.panel-group > .mc-hero,
+  .panel-group > .why-sec,.panel-group > .news-card,.panel-group > .note{grid-column:1/-1}
+  .tgt{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  .tgt-meta{grid-column:1/-1}
+  .why-card{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px}
+  .why-card .rs-sec:nth-child(3),.why-card .consensus{grid-column:1/-1}
+  .why-card .rs-sec + .rs-sec:nth-child(2){border-top:none}
+  .news{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .news .empty,.news .loading{grid-column:1/-1}
+}
+@media (max-width:900px){
+  .panel-group,.tgt,.why-card,.news{grid-template-columns:minmax(0,1fr)}
+  .why-card .rs-sec + .rs-sec:nth-child(2){border-top:1px solid var(--hair)}
+}
+@media (max-width:400px){
+  .sc b{font-size:12.5px}
+  .sc{padding:8px 7px}
+  .cd b{font-size:19px}
+  .hz-main b{font-size:21px}
+}

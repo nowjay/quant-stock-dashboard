@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>QUANT 주식 대시보드</title>
-<meta name="description" content="관심종목 · 실시간 캔들 차트 · AI 기술적 분석 대시보드">
+<meta name="description" content="관심종목 · 실시간 캔들 차트 · AI 목표주가 분석 · 글로벌 매크로 일정 대시보드">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20260925d">
+<link rel="stylesheet" href="assets/css/app.css?v=20260928a">
 </head>
 <body>
 
@@ -104,6 +104,7 @@
           <button data-ind="bb" style="color:#8B95A1"><span class="sw"></span>볼린저</button>
           <button data-ind="rsi" class="on" style="color:#F59E0B"><span class="sw"></span>RSI 14</button>
           <button data-ind="macd" class="on" style="color:#7A5AF8"><span class="sw"></span>MACD</button>
+          <button data-ind="tgt" class="on" style="color:#F04438"><span class="sw"></span>목표·손절</button>
         </div>
         <span class="hint-inline">⌘/Ctrl + 휠 확대 · 드래그 이동</span>
       </div>
@@ -131,7 +132,7 @@
   <aside class="aside">
     <nav class="pane-tabs card" id="side-tabs">
       <button data-panel="analysis" class="on"><i data-lucide="brain-circuit"></i>AI 분석</button>
-      <button data-panel="events"><i data-lucide="calendar-days"></i>주요 일정</button>
+      <button data-panel="macro"><i data-lucide="globe"></i>글로벌 매크로</button>
     </nav>
 
     <div id="panel-analysis" class="panel-group">
@@ -166,6 +167,17 @@
       </div>
     </section>
 
+    <section class="card tgt-card">
+      <div class="card-hd"><i data-lucide="target"></i><h2>AI 목표주가</h2><span class="sub" id="tgt-updated">—</span></div>
+      <div class="tgt" id="targets"></div>
+      <div class="note">일봉 기준 · 52주 고저 · MA50/200 박스 · 볼린저 상한 · 피봇 R1/R2 · 피보나치 파동 레벨을 실현 변동성(σ√기간)과 추세 점수로 종합한 참고 수치이며 투자 자문이 아닙니다. 도달 확률은 추세를 반영하지 않은 통계값입니다.</div>
+    </section>
+
+    <section class="card why-sec">
+      <div class="card-hd"><i data-lucide="file-search"></i><h2>목표주가 산정 근거</h2><span class="sub">AI 상세 분석</span></div>
+      <div class="why-card" id="reasons"></div>
+    </section>
+
     <section class="card">
       <div class="card-hd"><i data-lucide="activity"></i><h2>핵심 지표 리포트</h2></div>
       <div class="sig-list" id="signals"></div>
@@ -176,25 +188,44 @@
       <div class="levels" id="levels"></div>
     </section>
 
-    <section class="card">
-      <div class="card-hd"><i data-lucide="sparkles"></i><h2>AI 주가 전망</h2><span class="sub" id="fc-updated">—</span></div>
-      <div class="forecast" id="forecast"></div>
-      <div class="note">
-        기술적 지표를 규칙 기반으로 계산한 참고 정보이며 투자 자문이 아닙니다. 목표가·손절가는 ATR(변동성)과 피봇 레벨로 산출한 수치로, 실제 매매 결과를 보장하지 않습니다.
-      </div>
-    </section>
     </div>
 
-    <div id="panel-events" class="panel-group" hidden>
+    <div id="panel-macro" class="panel-group" hidden>
+      <section class="card mc-hero" id="mc-hero" aria-live="polite"></section>
+
       <section class="card">
-        <div class="card-hd"><i data-lucide="calendar-clock"></i><h2>종목 일정</h2><span class="sub" id="ev-symbol">—</span></div>
-        <div class="timeline" id="ev-symbol-list"></div>
+        <div class="card-hd"><i data-lucide="calendar-clock"></i><h2>주요 매크로 일정</h2><span class="sub">한국시간 기준</span></div>
+        <div class="chips" id="mc-filter" role="group" aria-label="일정 분류">
+          <button data-cat="" class="on">전체</button>
+          <button data-cat="rate">금리</button>
+          <button data-cat="inflation">물가</button>
+          <button data-cat="jobs">고용·경기</button>
+          <button data-cat="expiry">만기</button>
+        </div>
+        <div class="timeline" id="mc-list"></div>
+        <button class="more" id="mc-more" hidden>일정 더 보기</button>
       </section>
+
       <section class="card">
-        <div class="card-hd"><i data-lucide="landmark"></i><h2>증시 주요 일정</h2><span class="sub">FOMC · 만기일</span></div>
-        <div class="timeline" id="ev-market-list"></div>
+        <div class="card-hd"><i data-lucide="building-2"></i><h2>실적 시즌 캘린더</h2><span class="sub">빅테크 · 대형주</span></div>
+        <div class="earn" id="earn-list"></div>
+        <button class="more" id="earn-more" hidden>다음 주 일정 더 보기</button>
       </section>
-      <div class="note" id="ev-note"></div>
+
+      <section class="card news-card">
+        <div class="card-hd"><i data-lucide="newspaper"></i><h2>증시 뉴스</h2>
+          <span class="sub news-state" id="news-state" data-mode="idle">—</span>
+          <button class="icon-btn sm" id="news-refresh" aria-label="뉴스 새로고침" title="새로고침"><i data-lucide="refresh-cw"></i></button>
+        </div>
+        <div class="chips" id="news-filter" role="group" aria-label="뉴스 분류">
+          <button data-cat="" class="on">전체</button>
+          <button data-cat="rate">금리/물가</button>
+          <button data-cat="earn">실적</button>
+          <button data-cat="market">증시동향</button>
+        </div>
+        <div class="news" id="news-list"></div>
+      </section>
+      <div class="note" id="mc-note"></div>
     </div>
   </aside>
 </div>
@@ -231,6 +262,20 @@
       <input id="f-ws" type="text" placeholder="wss://... (미입력 시 REST 1초 폴링)" autocomplete="off">
       <div class="hint">KIS 실시간은 ws://ops.koreainvestment.com:21000 이지만, HTTPS 페이지에서는 wss:// 프록시가 필요합니다.</div>
     </div>
+    <div class="field-sep">뉴스 피드</div>
+    <div class="field">
+      <label for="f-news-mode">증시 뉴스 수신</label>
+      <select id="f-news-mode">
+        <option value="auto">자동 — 언론사 RSS (rss2json 공개 API 경유)</option>
+        <option value="proxy">사용자 프록시 경유</option>
+        <option value="off">끄기 — 수집된 스냅샷만 표시</option>
+      </select>
+    </div>
+    <div class="field" id="f-news-proxy-wrap">
+      <label for="f-news-proxy">뉴스 프록시 주소</label>
+      <input id="f-news-proxy" type="text" placeholder="https://my-server.com/rss?url={url}" autocomplete="off">
+      <div class="hint">{url} 자리에 언론사 RSS 주소가 들어갑니다. RSS(XML) 또는 rss2json 형식 JSON 을 CORS 허용으로 돌려주면 됩니다.</div>
+    </div>
     <div class="row">
       <button class="ghost" id="m-cancel">취소</button>
       <button class="primary" id="m-save">연결하기</button>
@@ -246,16 +291,18 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20260925d"></script>
-<script src="assets/core/search.js?v=20260925d"></script>
-<script src="assets/core/events.js?v=20260925d"></script>
-<script src="assets/core/market-data.js?v=20260925d"></script>
-<script src="assets/core/indicators.js?v=20260925d"></script>
-<script src="assets/core/analysis.js?v=20260925d"></script>
-<script src="assets/feed/mock.js?v=20260925d"></script>
-<script src="assets/feed/kis.js?v=20260925d"></script>
-<script src="assets/feed/toss.js?v=20260925d"></script>
-<script src="assets/feed/index.js?v=20260925d"></script>
-<script src="assets/app.js?v=20260925d"></script>
+<script src="assets/core/fx.js?v=20260928a"></script>
+<script src="assets/core/search.js?v=20260928a"></script>
+<script src="assets/core/events.js?v=20260928a"></script>
+<script src="assets/core/market-data.js?v=20260928a"></script>
+<script src="assets/core/indicators.js?v=20260928a"></script>
+<script src="assets/core/targets.js?v=20260928a"></script>
+<script src="assets/core/analysis.js?v=20260928a"></script>
+<script src="assets/core/news.js?v=20260928a"></script>
+<script src="assets/feed/mock.js?v=20260928a"></script>
+<script src="assets/feed/kis.js?v=20260928a"></script>
+<script src="assets/feed/toss.js?v=20260928a"></script>
+<script src="assets/feed/index.js?v=20260928a"></script>
+<script src="assets/app.js?v=20260928a"></script>
 </body>
 </html>

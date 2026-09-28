@@ -1,5 +1,7 @@
 /* =============================================================
-   analysis.js — 지표 종합 → 투자 의견 · 지지/저항 · 전망 리포트
+   analysis.js — 지표 종합 → 투자 의견 · 지지/저항 · 전망 · 목표주가
+     · 종합 의견/지표 리포트 : 화면에서 고른 봉(일·주·월) 기준
+     · 전망 · 목표주가       : 기간(1~2주, 1~3개월)이 달력 기준이라 항상 일봉 기준
    ============================================================= */
 window.QT = window.QT || {};
 (function (QT) {
@@ -9,8 +11,9 @@ window.QT = window.QT || {};
   function hi(bars, n, key){ let m = -Infinity; for (let i = Math.max(0, bars.length - n); i < bars.length; i++) if (bars[i][key] > m) m = bars[i][key]; return m; }
   function lo(bars, n, key){ let m = Infinity; for (let i = Math.max(0, bars.length - n); i < bars.length; i++) if (bars[i][key] < m) m = bars[i][key]; return m; }
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function money(v, cur){ return cur === 'USD' ? '$' + v.toFixed(2) : Math.round(v).toLocaleString('ko-KR') + '원'; }
 
-  function run(bars, st){
+  function core(bars, cur){
     const ind = I.set(bars), n = bars.length;
     const last = bars[n - 1], prev = bars[n - 2] || last, price = last.c;
     const at = function (arr) { return arr[n - 1]; };
@@ -62,12 +65,11 @@ window.QT = window.QT || {};
     const P = (prev.h + prev.l + prev.c) / 3;
     const pivot = { P:P, R1:2 * P - prev.l, S1:2 * P - prev.h, R2:P + (prev.h - prev.l), S2:P - (prev.h - prev.l) };
 
-    /* ---------- 전망 ---------- */
+    /* ---------- 방향성 점수 ---------- */
     const atrV = at(ind.atr) || (price * 0.02);
     const atrPct = atrV / price * 100;
     const hi52 = hi(bars, 252, 'h'), lo52 = lo(bars, 252, 'l');
     const hi20 = hi(bars, 20, 'h'), lo20 = lo(bars, 20, 'l');
-    const hi60 = hi(bars, 60, 'h'), lo60 = lo(bars, 60, 'l');
 
     let shortScore = 0;
     if (rsiV != null) shortScore += rsiV > 70 ? -1.5 : rsiV < 30 ? 1.5 : (rsiV - 50) / 25;
@@ -89,39 +91,20 @@ window.QT = window.QT || {};
 
     function dirOf(s){ return s >= 1.2 ? 'up' : s <= -1.2 ? 'down' : 'flat'; }
     const shortDir = dirOf(shortScore), midDir = dirOf(midScore);
-    /* 실현 변동성(최근 60봉 일간 수익률 표준편차) 기반 기대 등락폭 */
-    const rets = [];
-    for (let i = Math.max(1, n - 60); i < n; i++) rets.push((ind.close[i] - ind.close[i-1]) / ind.close[i-1]);
-    const mean = rets.reduce(function (s, v) { return s + v; }, 0) / (rets.length || 1);
-    const sd = Math.sqrt(rets.reduce(function (s, v) { return s + (v - mean) * (v - mean); }, 0) / (rets.length || 1));
-    const sigma = sd || (atrV / price * 0.6);
-    const bandShort = price * sigma * Math.sqrt(10);             // 약 2주(10영업일)
-    const bandMid = price * sigma * Math.sqrt(45);               // 약 2개월
-
-    /* 목표가 · 손절가: 피봇/최근 고저 + ATR 배수 중 더 현실적인 값 */
-    const resist = [pivot.R1, pivot.R2, hi20, hi60, hi52].filter(function (v) { return v > price * 1.001; }).sort(function (a, b) { return a - b; });
-    const support = [pivot.S1, pivot.S2, lo20, lo60].filter(function (v) { return v < price * 0.999; }).sort(function (a, b) { return b - a; });
-    const capUp = price + atrV * 3.2, capDown = price - atrV * 2.6;
-    const target1 = resist.length && resist[0] <= capUp ? resist[0] : price + atrV * 1.5;
-    const t2pool = resist.filter(function (v) { return v > target1 * 1.002; });
-    const target2 = t2pool.length && t2pool[0] <= price + atrV * 6 ? t2pool[0] : price + atrV * 3;
-    const stop = support.length && support[0] >= capDown ? support[0] : price - atrV * 1.3;
-    const rr = (price - stop) > 0 ? (target1 - price) / (price - stop) : null;
 
     /* ---------- 문장 ---------- */
-    const bandTxt = function (v) { return v; };
     const shortText = (function () {
       const head = shortDir === 'up' ? '단기적으로는 상승 우위 흐름입니다.'
         : shortDir === 'down' ? '단기적으로는 하락 압력이 우세합니다.'
         : '단기적으로는 뚜렷한 방향성 없이 등락하는 흐름입니다.';
+      const maPart = ma20 != null ? ' 20일선(' + money(ma20, cur) + ') ' + (price > ma20 ? '위에서 지지받는' : '아래에 놓인') + ' 위치이고,' : '';
       const rsiPart = rsiV == null ? '' :
-        rsiV > 70 ? ' RSI가 ' + rsiV.toFixed(0) + '로 과매수 구간이어서 눌림목이 나올 수 있고,'
-        : rsiV < 30 ? ' RSI가 ' + rsiV.toFixed(0) + '로 과매도 구간이어서 기술적 반등을 노려볼 수 있으며,'
-        : ' RSI ' + rsiV.toFixed(0) + '으로 과열 신호는 없고,';
+        rsiV > 70 ? ' RSI ' + rsiV.toFixed(0) + '로 과매수 구간이라 눌림목이 나올 수 있으며,'
+        : rsiV < 30 ? ' RSI ' + rsiV.toFixed(0) + '로 과매도 구간이라 기술적 반등을 노려볼 수 있고,'
+        : ' RSI ' + rsiV.toFixed(0) + '로 과열 신호는 없으며,';
       const macdPart = (macdV != null && macdS != null)
         ? (macdV > macdS ? ' MACD는 시그널선 위에서 매수 우위를 유지하고 있습니다.' : ' MACD는 시그널선 아래에 머물러 반등 확인이 필요합니다.')
         : '';
-      const maPart = ma20 != null ? ' 20일선(' + Math.round(ma20) + ') ' + (price > ma20 ? '위에서 지지받는' : '아래에 놓인') + ' 위치로,' : '';
       return head + maPart + rsiPart + macdPart;
     })();
     const midText = (function () {
@@ -145,18 +128,24 @@ window.QT = window.QT || {};
       bbUp:bbU, bbLow:bbL, bbPos:bbPos, bbWidth:bbWidth,
       pivot:pivot, atr:atrV, atrPct:atrPct,
       hi52:hi52, lo52:lo52, hi20:hi20, lo20:lo20,
-      forecast: {
-        shortDir:shortDir, midDir:midDir, shortText:shortText, midText:midText,
-        shortLow:price - bandShort, shortHigh:price + bandShort,
-        midLow:price - bandMid, midHigh:price + bandMid,
-        target1:target1, target2:target2, stop:stop, rr:rr,
-        target1Pct:(target1 - price) / price * 100,
-        target2Pct:(target2 - price) / price * 100,
-        stopPct:(stop - price) / price * 100,
-        band:bandTxt(bandShort)
-      }
+      shortScore:shortScore, midScore:midScore, shortDir:shortDir, midDir:midDir,
+      shortText:shortText, midText:midText
     };
   }
 
-  QT.Analysis = { run:run };
+  /**
+   * @param bars  화면 봉 (종합 의견 · 지표 리포트 · 피봇)
+   * @param st    종목 정보
+   * @param daily 일봉 (전망 · 목표주가). 생략하면 bars 를 일봉으로 간주
+   */
+  function run(bars, st, daily){
+    const cur = st && st.cur;
+    const a = core(bars, cur);
+    const d = (daily && daily.length && daily !== bars) ? core(daily, cur) : a;
+    a.forecast = { shortDir:d.shortDir, midDir:d.midDir, shortText:d.shortText, midText:d.midText };
+    a.targets = QT.Targets ? QT.Targets.build(daily || bars, d, st) : null;
+    return a;
+  }
+
+  QT.Analysis = { run:run, core:core };
 })(window.QT);

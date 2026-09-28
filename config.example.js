@@ -19,5 +19,11 @@ window.QT_CONFIG = {
     restBase: 'https://openapi.tossinvest.com',
     wsUrl: '',                   // 비우면 REST 1초 폴링
     pollMs: 1000
+  },
+
+  // 증시 뉴스 — 언론사 RSS 는 CORS 헤더가 없어 중계가 필요합니다
+  news: {
+    mode: 'auto',                // 'auto'(rss2json 공개 API) | 'proxy'(아래 주소) | 'off'(news.json 스냅샷만)
+    proxy: ''                    // 예: 'https://my-server.com/rss?url={url}' — RSS(XML) 또는 rss2json 형식 JSON 반환
   }
 };
