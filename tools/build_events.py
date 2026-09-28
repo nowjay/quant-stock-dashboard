@@ -80,15 +80,38 @@ def et_ms(y, m, d, hh, mm):
 
 
 BLS_KINDS = [('Consumer Price Index', 'cpi'), ('Producer Price Index', 'ppi'), ('Employment Situation', 'nfp')]
+BLS_PAGES = [('cpi', 'cpi'), ('ppi', 'ppi'), ('nfp', 'empsit')]
+# BLS 는 일반 브라우저/봇 UA 요청을 403 으로 막고, 연락처가 담긴 UA 를 요구합니다.
+BLS_HEADERS = [
+    ['-A', 'quant-stock-dashboard/1.0 (+https://github.com/nowjay/quant-stock-dashboard; data-schedule@users.noreply.github.com)',
+     '-H', 'Accept: text/calendar,text/html;q=0.9,*/*;q=0.8', '-H', 'Accept-Language: en-US,en;q=0.9'],
+    ['-A', UA, '-H', 'Accept: text/html,application/xhtml+xml,*/*;q=0.8', '-H', 'Accept-Language: en-US,en;q=0.9',
+     '-H', 'Referer: https://www.bls.gov/schedule/'],
+]
 
 
-def bls():
+def bls_get(url):
+    """헤더 조합을 바꿔 가며 요청하고, 실패하면 상태 코드와 본문 앞부분을 출력합니다."""
+    for h in BLS_HEADERS:
+        try:
+            r = subprocess.run(['curl', '-sL', '-m', '20', '-w', '\n%{http_code}'] + h + [url], capture_output=True, timeout=30)
+        except Exception as e:
+            print('    ! %s %s' % (url, e)); continue
+        body, _, code = r.stdout.decode('utf-8', 'replace').rpartition('\n')
+        if code == '200' and body.strip():
+            return body
+        print('    ! %s HTTP %s · %s' % (url.split('/')[-1], code or r.returncode, re.sub(r'\s+', ' ', body[:120])))
+        time.sleep(1)
+    return None
+
+
+def bls_ics():
     """BLS 전체 발표 일정(iCalendar)에서 CPI · PPI · 고용보고서만 추립니다."""
-    ics = get('https://www.bls.gov/schedule/news_release/bls.ics')
+    ics = bls_get('https://www.bls.gov/schedule/news_release/bls.ics')
     if not ics or 'BEGIN:VCALENDAR' not in ics:
         return []
     ics = re.sub(r'\r?\n[ \t]', '', ics)                   # 줄 접힘 해제
-    out, now = [], time.time() * 1000
+    out = []
     for ev in re.findall(r'BEGIN:VEVENT(.*?)END:VEVENT', ics, re.S):
         summary = re.search(r'^SUMMARY[^:]*:(.*)$', ev, re.M)
         start = re.search(r'^DTSTART([^:]*):(\d{8})(?:T(\d{4,6}))?(Z?)', ev, re.M)
@@ -100,10 +123,49 @@ def bls():
         ds, tm, z = start.group(2), start.group(3) or '083000', start.group(4)
         y, mo, d, hh, mi = int(ds[:4]), int(ds[4:6]), int(ds[6:8]), int(tm[:2]), int(tm[2:4])
         t = int(datetime(y, mo, d, hh, mi, tzinfo=timezone.utc).timestamp() * 1000) if z else et_ms(y, mo, d, hh, mi)
-        if t is None or t < now - 40 * 86400000:
+        if t is not None:
+            out.append({'kind': kind, 't': t})
+    return out
+
+
+def bls_pages():
+    """지표별 발표 일정 표(cpi.htm · ppi.htm · empsit.htm) — 'Oct. 14, 2026 | 08:30 AM' 형식의 행"""
+    out = []
+    for kind, page in BLS_PAGES:
+        html = bls_get('https://www.bls.gov/schedule/news_release/%s.htm' % page)
+        if not html:
             continue
-        out.append({'kind': kind, 't': t, 'status': '확정', 'source': 'bls.gov'})
-    return sorted(out, key=lambda x: x['t'])
+        n = 0
+        for row in re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.S | re.I):
+            cells = [re.sub(r'<[^>]+>|&nbsp;', ' ', c).strip() for c in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, re.S | re.I)]
+            text = ' | '.join(cells)
+            m = re.search(r'([A-Z][a-z]{2})[a-z]*\.? (\d{1,2}), (\d{4})\s*\|\s*(\d{1,2}):(\d{2})\s*([AP])\.?M', text)
+            if not m or m.group(1) not in MON3:
+                continue
+            hh = int(m.group(4)) % 12 + (12 if m.group(6) == 'P' else 0)
+            t = et_ms(int(m.group(3)), MON3[m.group(1)], int(m.group(2)), hh, int(m.group(5)))
+            if t is not None:
+                out.append({'kind': kind, 't': t}); n += 1
+        print('    %s.htm %d건' % (page, n))
+    return out
+
+
+def bls():
+    """CPI · PPI · 고용보고서 공식 발표 시각. iCalendar → 지표별 일정 페이지 순서로 시도"""
+    if ET_TZ is None:
+        return []
+    rows = bls_ics()
+    if not rows:
+        print('  iCalendar 실패 — 지표별 일정 페이지로 대체')
+        rows = bls_pages()
+    now, seen, out = time.time() * 1000, set(), []
+    for r in sorted(rows, key=lambda x: x['t']):
+        key = (r['kind'], r['t'])
+        if r['t'] < now - 40 * 86400000 or key in seen:
+            continue
+        seen.add(key)
+        out.append({'kind': r['kind'], 't': r['t'], 'status': '확정', 'source': 'bls.gov'})
+    return out
 
 
 def us_earnings(sym):

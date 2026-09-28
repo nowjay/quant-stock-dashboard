@@ -1,7 +1,7 @@
 # 시세 · 일정 · 뉴스 데이터 수집
 #   tools/build_*.py 를 GitHub 러너에서 실행하고 바뀐 assets/data/*.json 을 같은 브랜치에 커밋합니다.
 #   · 수동 실행: Actions → build-data → Run workflow (기본 브랜치에 이 파일이 있어야 버튼이 보입니다)
-#   · 이 파일을 수정해 푸시하면 해당 브랜치에서 한 번 실행됩니다.
+#   · 이 파일이나 수집기(tools/build_*.py)를 수정해 푸시하면 해당 브랜치에서 한 번 실행됩니다.
 name: build-data
 
 on:
@@ -14,6 +14,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-data.yml'
+      - 'tools/build_*.py'
 
 permissions:
   contents: write

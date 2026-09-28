@@ -17,7 +17,7 @@ OUT = B.OUT
 NASDAQ_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36'
 FEATURED = ['AAPL','MSFT','NVDA','GOOGL','AMZN','META','TSLA','AVGO','NFLX','AMD',
             'PLTR','COIN','JPM','LLY','COST','ORCL','MU','INTC','UBER','CRM']
-FEATURED_ETF = ['SPY','QQQ','SOXL','TQQQ','SOXX','SCHD','TLT','GLD']
+ETF_BARS = 300                     # ETF 일봉 보관 개수 (52주 고저 · 200일선 계산에 충분)
 
 # 주요 미국 ETF — (티커, 정식 명칭, 한글 설명: 검색 별칭)
 US_ETFS = [
@@ -191,6 +191,12 @@ def etf_quotes():
                         'r': money(r.get('percentageChange') or r.get('pctchange')) or 0, 'v': 0}
     return out
 
+def quote_from_bars(bars):
+    """마지막 두 봉(정규장 종가)으로 현재가 · 전일 대비 계산"""
+    last, prev = bars[-1], bars[-2]
+    d = last[4] - prev[4]
+    return {'p': last[4], 'd': round(d, 4), 'r': round(d / prev[4] * 100, 4) if prev[4] else 0, 'v': last[5]}
+
 def main():
     sym, q, hist = load('symbols.json'), load('quotes.json'), load('history.json')
     by = {s['c']: s for s in sym['items']}
@@ -229,16 +235,28 @@ def main():
         if code in eq: q['items'][code] = eq[code]
     print('  시세 %d/%d' % (sum(1 for c, _, _ in US_ETFS if c in eq), len(US_ETFS)))
 
-    print('[2/3] 대표 종목 일봉')
+    print('[2/3] 대표 종목 · 주요 ETF 일봉')
     ok = 0
-    targets = [(s, 'stocks') for s in FEATURED] + [(s, 'etf') for s in FEATURED_ETF]
-    for i, (s, cls) in enumerate(targets):
+    targets = [(s, 'stocks', 520) for s in FEATURED] + [(c, 'etf', ETF_BARS) for c, _, _ in US_ETFS]
+    for i, (s, cls, keep) in enumerate(targets):
         bars = history(s, assetclass=cls)
         if bars and len(bars) > 100:
-            hist['items'][s] = bars[-520:]; ok += 1
+            hist['items'][s] = bars[-keep:]; ok += 1
         print('  %d/%d %s %s' % (i + 1, len(targets), s, len(bars) if bars else 'x'))
         time.sleep(0.6)
     print('  성공 %d/%d' % (ok, len(targets)))
+
+    # 스크리너의 등락값은 정규장 종가 기준과 어긋나는 경우가 있다(예: SOXL 스크리너 +0.05%, 실제 +3.50%).
+    # 일봉이 있는 미국 종목은 현재가 · 등락을 마지막 두 봉 종가로 맞춘다.
+    fixed, shown = 0, 0
+    for code, bars in hist['items'].items():
+        if code not in by or by[code].get('cur') != 'USD' or len(bars) < 2: continue
+        new, old = quote_from_bars(bars), q['items'].get(code) or {}
+        if shown < 5 and abs((old.get('r') or 0) - new['r']) > 0.1:
+            print('  보정 %-5s 스크리너 %s (%+.2f%%) → 종가 %s (%+.2f%%)' % (code, old.get('p'), old.get('r') or 0, new['p'], new['r']))
+            shown += 1
+        q['items'][code] = new; fixed += 1
+    print('  일봉 기준 시세 보정 %d종목' % fixed)
 
     print('[3/3] 저장 · 미국 종목을 시총순으로 정렬')
     kr = [s for s in sym['items'] if s.get('cur') != 'USD']
