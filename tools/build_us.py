@@ -3,8 +3,11 @@
 미국 종목 수집 (nasdaq.com 공개 API)
   · 전체 스크리너   : 미국 상장 전종목 + 현재가/등락/시총/섹터
   · NASDAQ-100 구성 : list-type/nasdaq100
+  · 주요 미국 ETF    : 아래 US_ETFS 목록(레버리지·지수·섹터·채권·원자재) + screener/etf 시세
   · 대표 종목 일봉   : quote/{sym}/historical
 기존 assets/data/*.json 에 병합합니다.
+실행: python3 tools/build_us.py          (전체 수집)
+      python3 tools/build_us.py --etf-only   (네트워크 없이 ETF 종목 마스터만 병합)
 """
 import json, re, io, os, sys, time
 sys.path.insert(0, os.path.dirname(__file__))
@@ -14,6 +17,84 @@ OUT = B.OUT
 NASDAQ_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36'
 FEATURED = ['AAPL','MSFT','NVDA','GOOGL','AMZN','META','TSLA','AVGO','NFLX','AMD',
             'PLTR','COIN','JPM','LLY','COST','ORCL','MU','INTC','UBER','CRM']
+FEATURED_ETF = ['SPY','QQQ','SOXL','TQQQ','SOXX','SCHD','TLT','GLD']
+
+# 주요 미국 ETF — (티커, 정식 명칭, 한글 설명: 검색 별칭)
+US_ETFS = [
+    ('SPY',  'SPDR S&P 500 ETF Trust',                         'S&P500 지수 추종'),
+    ('VOO',  'Vanguard S&P 500 ETF',                           'S&P500 지수 추종 뱅가드'),
+    ('IVV',  'iShares Core S&P 500 ETF',                       'S&P500 지수 추종 아이셰어즈'),
+    ('VTI',  'Vanguard Total Stock Market ETF',                '미국 전체 시장'),
+    ('QQQ',  'Invesco QQQ Trust',                              '나스닥100 지수 추종'),
+    ('QQQM', 'Invesco NASDAQ 100 ETF',                         '나스닥100 지수 추종 저보수'),
+    ('DIA',  'SPDR Dow Jones Industrial Average ETF',          '다우존스 30'),
+    ('IWM',  'iShares Russell 2000 ETF',                       '러셀2000 중소형주'),
+    ('SCHD', 'Schwab U.S. Dividend Equity ETF',                '미국 배당 성장 슈드'),
+    ('JEPI', 'JPMorgan Equity Premium Income ETF',             '커버드콜 월배당 S&P500'),
+    ('JEPQ', 'JPMorgan Nasdaq Equity Premium Income ETF',      '커버드콜 월배당 나스닥'),
+    ('VYM',  'Vanguard High Dividend Yield ETF',               '고배당'),
+    ('VIG',  'Vanguard Dividend Appreciation ETF',             '배당 성장'),
+    ('VGT',  'Vanguard Information Technology ETF',            '정보기술 섹터'),
+    ('XLK',  'Technology Select Sector SPDR Fund',             '기술 섹터'),
+    ('XLF',  'Financial Select Sector SPDR Fund',              '금융 섹터'),
+    ('XLE',  'Energy Select Sector SPDR Fund',                 '에너지 섹터'),
+    ('XLV',  'Health Care Select Sector SPDR Fund',            '헬스케어 섹터'),
+    ('XLY',  'Consumer Discretionary Select Sector SPDR Fund', '임의소비재 섹터'),
+    ('XLI',  'Industrial Select Sector SPDR Fund',             '산업재 섹터'),
+    ('XLU',  'Utilities Select Sector SPDR Fund',              '유틸리티 섹터'),
+    ('SMH',  'VanEck Semiconductor ETF',                       '반도체'),
+    ('SOXX', 'iShares Semiconductor ETF',                      '반도체 필라델피아'),
+    ('SOXL', 'Direxion Daily Semiconductor Bull 3X Shares',    '반도체 3배 레버리지 속슬'),
+    ('SOXS', 'Direxion Daily Semiconductor Bear 3X Shares',    '반도체 3배 인버스'),
+    ('TQQQ', 'ProShares UltraPro QQQ',                         '나스닥100 3배 레버리지'),
+    ('SQQQ', 'ProShares UltraPro Short QQQ',                   '나스닥100 3배 인버스'),
+    ('QLD',  'ProShares Ultra QQQ',                            '나스닥100 2배 레버리지'),
+    ('UPRO', 'ProShares UltraPro S&P500',                      'S&P500 3배 레버리지'),
+    ('SPXL', 'Direxion Daily S&P 500 Bull 3X Shares',          'S&P500 3배 레버리지'),
+    ('SPXS', 'Direxion Daily S&P 500 Bear 3X Shares',          'S&P500 3배 인버스'),
+    ('SSO',  'ProShares Ultra S&P500',                         'S&P500 2배 레버리지'),
+    ('SH',   'ProShares Short S&P500',                         'S&P500 인버스'),
+    ('PSQ',  'ProShares Short QQQ',                            '나스닥100 인버스'),
+    ('TNA',  'Direxion Daily Small Cap Bull 3X Shares',        '러셀2000 3배 레버리지'),
+    ('TZA',  'Direxion Daily Small Cap Bear 3X Shares',        '러셀2000 3배 인버스'),
+    ('FNGU', 'MicroSectors FANG+ 3X Leveraged ETN',            '빅테크 FANG 3배 레버리지'),
+    ('TECL', 'Direxion Daily Technology Bull 3X Shares',       '기술주 3배 레버리지'),
+    ('LABU', 'Direxion Daily S&P Biotech Bull 3X Shares',      '바이오 3배 레버리지'),
+    ('NVDL', 'GraniteShares 2x Long NVDA Daily ETF',           '엔비디아 2배 레버리지'),
+    ('TSLL', 'Direxion Daily TSLA Bull 2X Shares',             '테슬라 2배 레버리지'),
+    ('CONL', 'GraniteShares 2x Long COIN Daily ETF',           '코인베이스 2배 레버리지'),
+    ('ARKK', 'ARK Innovation ETF',                             '아크 혁신 캐시우드'),
+    ('XBI',  'SPDR S&P Biotech ETF',                           '바이오테크'),
+    ('KRE',  'SPDR S&P Regional Banking ETF',                  '지역은행'),
+    ('TLT',  'iShares 20+ Year Treasury Bond ETF',             '미국 장기채 20년 국채'),
+    ('TMF',  'Direxion Daily 20+ Year Treasury Bull 3X Shares','미국 장기채 3배 레버리지'),
+    ('IEF',  'iShares 7-10 Year Treasury Bond ETF',            '미국 중기채 국채'),
+    ('SHY',  'iShares 1-3 Year Treasury Bond ETF',             '미국 단기채 국채'),
+    ('SGOV', 'iShares 0-3 Month Treasury Bond ETF',            '초단기 국채 파킹'),
+    ('BIL',  'SPDR Bloomberg 1-3 Month T-Bill ETF',            '초단기 국채 T-Bill'),
+    ('BND',  'Vanguard Total Bond Market ETF',                 '미국 종합 채권'),
+    ('AGG',  'iShares Core U.S. Aggregate Bond ETF',           '미국 종합 채권'),
+    ('HYG',  'iShares iBoxx $ High Yield Corporate Bond ETF',  '하이일드 회사채'),
+    ('LQD',  'iShares iBoxx $ Investment Grade Corporate Bond ETF', '투자등급 회사채'),
+    ('GLD',  'SPDR Gold Shares',                               '금 골드'),
+    ('IAU',  'iShares Gold Trust',                             '금 골드'),
+    ('SLV',  'iShares Silver Trust',                           '은 실버'),
+    ('USO',  'United States Oil Fund',                         '원유 WTI'),
+    ('UVXY', 'ProShares Ultra VIX Short-Term Futures ETF',     'VIX 변동성 공포지수'),
+    ('IBIT', 'iShares Bitcoin Trust ETF',                      '비트코인 현물'),
+    ('ETHA', 'iShares Ethereum Trust ETF',                     '이더리움 현물'),
+    ('EEM',  'iShares MSCI Emerging Markets ETF',              '신흥국'),
+    ('EWY',  'iShares MSCI South Korea ETF',                   '한국 MSCI'),
+    ('EWJ',  'iShares MSCI Japan ETF',                         '일본'),
+    ('KWEB', 'KraneShares CSI China Internet ETF',             '중국 인터넷'),
+    ('FXI',  'iShares China Large-Cap ETF',                    '중국 대형주'),
+    ('VNQ',  'Vanguard Real Estate ETF',                       '리츠 부동산'),
+    ('ITA',  'iShares U.S. Aerospace & Defense ETF',           '방산 항공우주'),
+    ('URA',  'Global X Uranium ETF',                           '우라늄 원자력'),
+    ('TAN',  'Invesco Solar ETF',                              '태양광'),
+    ('LIT',  'Global X Lithium & Battery Tech ETF',            '리튬 2차전지'),
+    ('BOTZ', 'Global X Robotics & Artificial Intelligence ETF','로봇 인공지능'),
+]
 
 def load(n):
     with io.open(os.path.join(OUT, n), encoding='utf-8') as f: return json.load(f)
@@ -62,10 +143,10 @@ def ndx100():
         return set()
     return set((r.get('symbol') or '').strip() for r in rows)
 
-def history(sym, years=2):
+def history(sym, years=2, assetclass='stocks'):
     today = time.strftime('%Y-%m-%d')
     frm = time.strftime('%Y-%m-%d', time.localtime(time.time() - years * 365 * 86400))
-    raw = B.get('https://api.nasdaq.com/api/quote/%s/historical?assetclass=stocks&fromdate=%s&todate=%s&limit=600' % (sym, frm, today), timeout=25)
+    raw = B.get('https://api.nasdaq.com/api/quote/%s/historical?assetclass=%s&fromdate=%s&todate=%s&limit=600' % (sym, assetclass, frm, today), timeout=25)
     if not raw: return None
     try:
         rows = json.loads(raw)['data']['tradesTable']['rows']
@@ -81,9 +162,44 @@ def history(sym, years=2):
     bars.sort(key=lambda b: b[0])
     return bars
 
+def merge_etfs(sym, by):
+    """US_ETFS 를 종목 마스터에 병합 (네트워크 불필요)"""
+    added = 0
+    for code, name, alias in US_ETFS:
+        item = by.get(code)
+        if item is None:
+            item = {'c': code, 'cur': 'USD'}
+            sym['items'].append(item); by[code] = item; added += 1
+        item.update({'n': name, 'e': alias, 'm': 'US ETF', 't': 'etf', 'cur': 'USD', 's': 'ETF'})
+    return added
+
+def etf_quotes():
+    """nasdaq ETF 스크리너 — 현재가 · 등락"""
+    raw = B.get('https://api.nasdaq.com/api/screener/etf?tableonly=true&limit=10000&download=true', timeout=40)
+    if not raw: return {}
+    try:
+        d = json.loads(raw)['data']
+        rows = (d.get('data') or d).get('rows') or []
+    except Exception:
+        return {}
+    out = {}
+    for r in rows:
+        sym = (r.get('symbol') or '').strip()
+        p = money(r.get('lastSalePrice') or r.get('lastsale'))
+        if sym and p:
+            out[sym] = {'p': p, 'd': money(r.get('netChange') or r.get('netchange')) or 0,
+                        'r': money(r.get('percentageChange') or r.get('pctchange')) or 0, 'v': 0}
+    return out
+
 def main():
     sym, q, hist = load('symbols.json'), load('quotes.json'), load('history.json')
     by = {s['c']: s for s in sym['items']}
+
+    if '--etf-only' in sys.argv:
+        print('ETF 종목 마스터 병합: 신규 %d · 목록 %d' % (merge_etfs(sym, by), len(US_ETFS)))
+        sym['count'] = len(sym['items'])
+        save('symbols.json', sym)
+        return
 
     print('[1/3] 미국 전종목 스크리너')
     rows = screener()
@@ -106,21 +222,30 @@ def main():
             q['items'][code] = {'p': r['price'], 'd': r['diff'] or 0, 'r': r['rate'] or 0, 'v': r['volume'] or 0}
     print('  신규 %d · 전체 %d종목' % (added, len(sym['items'])))
 
+    print('[1b] 주요 미국 ETF')
+    print('  마스터 신규 %d' % merge_etfs(sym, by))
+    eq = etf_quotes()
+    for code, _, _ in US_ETFS:
+        if code in eq: q['items'][code] = eq[code]
+    print('  시세 %d/%d' % (sum(1 for c, _, _ in US_ETFS if c in eq), len(US_ETFS)))
+
     print('[2/3] 대표 종목 일봉')
     ok = 0
-    for i, s in enumerate(FEATURED):
-        bars = history(s)
+    targets = [(s, 'stocks') for s in FEATURED] + [(s, 'etf') for s in FEATURED_ETF]
+    for i, (s, cls) in enumerate(targets):
+        bars = history(s, assetclass=cls)
         if bars and len(bars) > 100:
             hist['items'][s] = bars[-520:]; ok += 1
-        print('  %d/%d %s %s' % (i + 1, len(FEATURED), s, len(bars) if bars else 'x'))
+        print('  %d/%d %s %s' % (i + 1, len(targets), s, len(bars) if bars else 'x'))
         time.sleep(0.6)
-    print('  성공 %d/%d' % (ok, len(FEATURED)))
+    print('  성공 %d/%d' % (ok, len(targets)))
 
     print('[3/3] 저장 · 미국 종목을 시총순으로 정렬')
     kr = [s for s in sym['items'] if s.get('cur') != 'USD']
     us = [s for s in sym['items'] if s.get('cur') == 'USD']
     order = {r['code']: i for i, r in enumerate(rows)}
-    us.sort(key=lambda s: order.get(s['c'], 99999))
+    etf_rank = {c: i for i, (c, _, _) in enumerate(US_ETFS)}
+    us.sort(key=lambda s: (order.get(s['c'], 99999), etf_rank.get(s['c'], 0)))
     sym['items'] = kr + us
     stamp = time.strftime('%Y-%m-%dT%H:%M:%S%z')
     sym['updated'] = q['updated'] = hist['updated'] = stamp

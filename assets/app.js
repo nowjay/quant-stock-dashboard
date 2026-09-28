@@ -317,6 +317,7 @@
       pool = M.UNIVERSE.filter(function (s) {
         if (state.mkt === 'ALL') return true;
         if (state.mkt === 'US') return s.cur === 'USD';
+        if (state.mkt === 'ETF') return s.type === 'etf';
         return s.market === state.mkt;
       }).slice(0, 60);
     }
@@ -738,7 +739,7 @@
       $('#q-name').textContent = st.name;
       $('#q-code').textContent = st.code + (st.en ? ' · ' + st.en : '');
       $('#q-market').textContent = st.market;
-      $('#q-sector').textContent = st.cur === 'USD' ? '미국 주식' : '국내 주식';
+      $('#q-sector').textContent = st.type === 'etf' ? 'ETF' : st.cur === 'USD' ? '미국 주식' : '국내 주식';
       $('#q-src').textContent = '시세 미수집'; $('#q-src').dataset.kind = 'sim';
       $('#q-price').textContent = '—'; $('#q-price').className = 'now num flat';
       $('#q-fx').hidden = true;

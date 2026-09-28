@@ -16,6 +16,7 @@ python3 -m http.server 8777    # 프로젝트 폴더에서 실행 후 http://loc
 |---|---|---|
 | 국내 전종목 · ETF 마스터 | 네이버 금융 | **실제** (KOSPI 2,484 · KOSDAQ 1,821 · ETF 1,175) |
 | 미국 종목 마스터 | Wikipedia S&P 500 / NASDAQ-100 | **실제** |
+| 미국 주요 ETF 마스터 | SOXL · TQQQ · QQQ · SPY · SCHD 등 73종 (`tools/build_us.py`의 `US_ETFS`) | 목록 고정, 시세는 nasdaq ETF 스크리너 수집 시 반영 |
 | 국내 종목 현재가·등락률 | 네이버 금융 | **실제** (수집 시점 종가) |
 | 대표 종목 일봉 | 네이버 금융 / Yahoo Finance | **실제** (2년치) |
 | 그 외 종목의 과거 경로 | 시뮬레이션 | 최근 종가는 실제, **경로만 생성** → 화면에 `시뮬레이션 경로` 배지 |
