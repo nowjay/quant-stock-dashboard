@@ -18,37 +18,18 @@ window.QT = window.QT || {};
     const last = bars[n - 1], prev = bars[n - 2] || last, price = last.c;
     const at = function (arr) { return arr[n - 1]; };
 
-    /* ---------- 지표 스코어보드 ---------- */
-    const rows = [];
-    [['SMA 5', ind.sma5], ['SMA 10', ind.sma10], ['SMA 20', ind.sma20],
-     ['SMA 50', ind.sma50], ['SMA 120', ind.sma120], ['EMA 20', ind.ema20]].forEach(function (d) {
-      const v = at(d[1]);
-      if (v == null){ rows.push({ group:'ma', name:d[0], value:null, signal:0, na:true }); return; }
-      const gap = (price - v) / v * 100;
-      rows.push({ group:'ma', name:d[0], value:v, signal: gap > 0.15 ? 1 : gap < -0.15 ? -1 : 0 });
-    });
-    const rsiV = at(ind.rsi), stochV = at(ind.stoch), cciV = at(ind.cci), wrV = at(ind.wr);
-    const macdV = at(ind.macd), macdS = at(ind.macdSignal), histV = at(ind.macdHist), histPrev = ind.macdHist[n - 2];
-    const mom = price - (ind.close[n - 11] != null ? ind.close[n - 11] : ind.close[0]);
-    rows.push({ group:'osc', name:'RSI (14)', value:rsiV, signal: rsiV == null ? 0 : rsiV > 70 ? -1 : rsiV < 30 ? 1 : 0 });
-    rows.push({ group:'osc', name:'Stoch %K', value:stochV, signal: stochV == null ? 0 : stochV > 80 ? -1 : stochV < 20 ? 1 : 0 });
-    rows.push({ group:'osc', name:'MACD', value:macdV, signal: (macdV == null || macdS == null) ? 0 : macdV > macdS ? 1 : -1 });
-    rows.push({ group:'osc', name:'CCI (20)', value:cciV, signal: cciV == null ? 0 : cciV > 100 ? -1 : cciV < -100 ? 1 : 0 });
-    rows.push({ group:'osc', name:'Williams %R', value:wrV, signal: wrV == null ? 0 : wrV > -20 ? -1 : wrV < -80 ? 1 : 0 });
-    rows.push({ group:'osc', name:'모멘텀 (10)', value:mom, signal: mom > 0 ? 1 : mom < 0 ? -1 : 0 });
-
+    /* ---------- 국면 인식 종합 점수 (scoring.js) ---------- */
+    const rsiV = at(ind.rsi), macdV = at(ind.macd), macdS = at(ind.macdSignal), histV = at(ind.macdHist), histPrev = ind.macdHist[n - 2];
+    const sc = QT.Scoring.at(bars, ind, n - 1);
+    const rows = sc.comps;
     let buy = 0, sell = 0, neutral = 0;
-    rows.forEach(function (r) { if (r.na) return; if (r.signal > 0) buy++; else if (r.signal < 0) sell++; else neutral++; });
+    rows.forEach(function (r) { if (r.v > 0.2) buy++; else if (r.v < -0.2) sell++; else neutral++; });
 
     const ma20 = at(ind.sma20), ma50 = at(ind.sma50), ma200 = at(ind.sma200);
-    let score = Math.round((buy - sell) / (buy + sell + neutral || 1) * 100);
     const align = (ma20 != null && ma50 != null && ma200 != null)
       ? (ma20 > ma50 && ma50 > ma200 ? 'up' : (ma20 < ma50 && ma50 < ma200 ? 'down' : 'mixed')) : 'na';
-    if (align === 'up') score += 10; else if (align === 'down') score -= 10;
-    if (histV != null && histPrev != null) score += histV > histPrev ? 5 : -5;
-    score = clamp(score, -100, 100);
-
-    const verdict = score >= 55 ? '강력 매수' : score >= 18 ? '매수' : score > -18 ? '중립' : score > -55 ? '매도' : '강력 매도';
+    const score = sc.score;
+    const verdict = QT.Scoring.verdictOf(score);
     const tone = score >= 18 ? 'bull' : score <= -18 ? 'bear' : 'neut';
 
     /* ---------- 크로스 ---------- */
@@ -121,7 +102,9 @@ window.QT = window.QT || {};
 
     return {
       ind:ind, price:price, prevClose:prev.c, rows:rows,
-      buy:buy, sell:sell, neutral:neutral, score:score, verdict:verdict, tone:tone,
+      buy:buy, sell:sell, neutral:neutral, score:score, verdict:verdict, tone:tone, scoring:sc,
+      adx:sc.adx, regime:sc.regime, cats:sc.cats,
+      stoch:at(ind.stoch), mfi:at(ind.mfi), pdi:at(ind.pdi), mdi:at(ind.mdi),
       align:align, maCross:maCross, longCross:longCross, macdCross:macdCross,
       ma20:ma20, ma50:ma50, ma200:ma200,
       rsi:rsiV, macd:macdV, macdSignal:macdS, macdHist:histV,
@@ -142,7 +125,9 @@ window.QT = window.QT || {};
     const cur = st && st.cur;
     const a = core(bars, cur);
     const d = (daily && daily.length && daily !== bars) ? core(daily, cur) : a;
+    a.daily = d;                                          // 일봉 기준 분석 (신호 · 체크리스트 · 백테스트)
     a.forecast = { shortDir:d.shortDir, midDir:d.midDir, shortText:d.shortText, midText:d.midText };
+    a.events = QT.Patterns ? QT.Patterns.detect(daily || bars, d.ind, 60) : [];
     a.targets = QT.Targets ? QT.Targets.build(daily || bars, d, st) : null;
     return a;
   }

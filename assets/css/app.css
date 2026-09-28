@@ -674,3 +674,97 @@ a.nw:hover{border-color:var(--line);box-shadow:var(--shadow-md)}
   .cd b{font-size:19px}
   .hz-main b{font-size:21px}
 }
+
+/* ============================================================
+   한눈에 보기 · 점수 구성 · 최근 신호 · 시간대 비교 · 용어 설명
+   ============================================================ */
+.summary{padding:12px 16px 14px;display:flex;flex-direction:column;gap:10px}
+.sum-head{display:flex;gap:10px;align-items:flex-start}
+.sum-head p{margin:0;font-size:13.5px;line-height:1.6;font-weight:600;letter-spacing:-.02em}
+.vchip{
+  flex:none;display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:8px;
+  font-size:12.5px;font-weight:800;background:var(--hair);color:var(--ink-2);white-space:nowrap;
+}
+.vchip.bull{background:var(--up-weak);color:var(--up)}
+.vchip.bear{background:var(--down-weak);color:var(--down)}
+.vchip.sm{height:20px;padding:0 6px;font-size:10.5px;border-radius:6px;font-style:normal}
+.guide{display:flex;gap:8px;padding:10px 12px;border-radius:12px;background:var(--blue-weak);color:var(--ink-2)}
+.guide [data-lucide]{flex:none;width:15px;height:15px;color:var(--blue);margin-top:2px}
+.guide p{margin:0;font-size:12.5px;line-height:1.65}
+.guide b{color:var(--ink)}
+.checks{border:1px solid var(--hair);border-radius:12px;padding:8px 10px}
+.checks-hd{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:4px}
+.checks-hd b{font-weight:800}
+.checks-hd span{color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.ck{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:12.5px}
+.ck [data-lucide]{width:14px;height:14px;flex:none;stroke-width:3}
+.ck.on [data-lucide]{color:var(--green)}
+.ck.off{color:var(--muted)}
+.ck.off [data-lucide]{color:var(--faint)}
+.rel{font-size:12px;line-height:1.65;color:var(--ink-2);padding:9px 11px;border-radius:12px;background:var(--ground)}
+.rel > b:first-child{display:flex;align-items:center;gap:4px;color:var(--ink);font-weight:800;margin-bottom:2px}
+.rel em{display:block;font-style:normal;font-weight:800;margin-top:3px}
+.rel.good{background:#ECFDF3} .rel.good em{color:#027A48}
+.rel.bad{background:var(--amber-weak)} .rel.bad em{color:#B54708}
+.rel.caution{background:var(--amber-weak);color:#B54708}
+.muted{color:var(--muted)}
+.sum-note{margin:0;font-size:10.5px;color:var(--faint)}
+
+/* 게이지 보강 */
+.gauge .why{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 6px}
+.regime{font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:var(--hair);color:var(--ink-2)}
+.regime[data-r="trend"]{background:#F4F0FF;color:#6938EF}
+.regime[data-r="range"]{background:var(--amber-weak);color:#B54708}
+.cats{display:flex;flex-direction:column;gap:7px;margin-top:14px;text-align:left}
+.cat{display:grid;grid-template-columns:48px 1fr 40px;align-items:center;gap:8px;font-size:12px}
+.cat > span:first-child{color:var(--ink-2);font-weight:700}
+.cat .bar{position:relative;height:8px;border-radius:4px;background:var(--hair)}
+.cat .bar::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}
+.cat .bar i{position:absolute;top:0;bottom:0;border-radius:4px}
+.cat .bar i.pos{background:var(--up)}
+.cat .bar i.neg{background:var(--down)}
+.cat b{text-align:right;font-weight:800}
+
+/* 목표가 백테스트 줄 */
+.bt-line{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--ground);font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+.bt-line > b:first-child{display:inline-flex;align-items:center;gap:3px;margin-right:6px;color:var(--ink);font-weight:800}
+.bt-line b{color:var(--ink)}
+.bt-line b.down{color:var(--down)}
+
+/* 최근 기술적 신호 */
+.events{padding:8px 16px 14px;display:flex;flex-direction:column;gap:7px}
+.evt{display:flex;gap:10px;padding:9px 10px;border-radius:12px;background:var(--ground)}
+.evt .ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;background:#fff;box-shadow:var(--shadow)}
+.evt .ic [data-lucide]{width:14px;height:14px}
+.evt.bull .ic{color:var(--up)} .evt.bear .ic{color:var(--down)} .evt.neut .ic{color:var(--muted)}
+.evt b{display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:800;letter-spacing:-.02em}
+.evt small{display:block;font-size:10.5px;color:var(--muted);margin-top:1px}
+.evt p{margin:4px 0 0;font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+
+/* 시간대별 추세 비교 */
+.mtf{padding:10px 16px 14px}
+.mtf-head{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;border-radius:10px;font-size:12.5px;font-weight:700;background:var(--ground)}
+.mtf-head.bull{background:var(--up-weak);color:#B42318}
+.mtf-head.bear{background:var(--down-weak);color:var(--blue-ink)}
+.mtf-t{font-size:12px}
+.mtf-r{display:grid;grid-template-columns:48px 1fr 40px 44px 72px;align-items:center;gap:6px;padding:7px 2px}
+.mtf-r + .mtf-r{border-top:1px solid var(--hair)}
+.mtf-r.hd{color:var(--muted);font-size:10.5px;font-weight:700;padding-top:0}
+.mtf-r > span:first-child{font-weight:800}
+.mtf-r > span:last-child{text-align:right}
+.mtf-r .up{font-weight:700} .mtf-r .down{font-weight:700}
+
+/* 용어 설명 (?) */
+.tip{
+  display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;flex:none;
+  font-size:9.5px;font-weight:800;line-height:1;color:var(--muted);background:var(--hair);margin-left:2px;
+  vertical-align:1px;cursor:help;
+}
+.tip:hover,.tip:focus-visible{background:var(--blue-weak);color:var(--blue-ink)}
+.tipbox{
+  position:fixed;z-index:80;padding:10px 12px;border-radius:12px;background:var(--ink);color:#fff;
+  font-size:12px;line-height:1.6;box-shadow:var(--shadow-md);pointer-events:auto;
+}
+@media (max-width:1280px){
+  .panel-group > .sum-card{grid-column:1/-1}
+}

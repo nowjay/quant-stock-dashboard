@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20260928a">
+<link rel="stylesheet" href="assets/css/app.css?v=20260929a">
 </head>
 <body>
 
@@ -105,6 +105,7 @@
           <button data-ind="rsi" class="on" style="color:#F59E0B"><span class="sw"></span>RSI 14</button>
           <button data-ind="macd" class="on" style="color:#7A5AF8"><span class="sw"></span>MACD</button>
           <button data-ind="tgt" class="on" style="color:#F04438"><span class="sw"></span>목표·손절</button>
+          <button data-ind="sig" class="on" style="color:#12B76A"><span class="sw"></span>신호</button>
         </div>
         <span class="hint-inline">⌘/Ctrl + 휠 확대 · 드래그 이동</span>
       </div>
@@ -136,6 +137,11 @@
     </nav>
 
     <div id="panel-analysis" class="panel-group">
+    <section class="card sum-card">
+      <div class="card-hd"><i data-lucide="scan-eye"></i><h2>한눈에 보기</h2><span class="sub">일봉 기준 · 쉬운 설명</span></div>
+      <div class="summary" id="summary"></div>
+    </section>
+
     <section class="card gauge-card">
       <div class="card-hd"><i data-lucide="gauge"></i><h2>종합 투자 의견</h2><span class="sub" id="basis">일봉 기준</span></div>
       <div class="gauge">
@@ -164,6 +170,7 @@
           <div><span>중립</span><b class="flat num" id="t-neut">0</b></div>
           <div><span>매도</span><b class="down num" id="t-sell">0</b></div>
         </div>
+        <div class="cats" id="cats"></div>
       </div>
     </section>
 
@@ -173,13 +180,23 @@
       <div class="note">일봉 기준 · 52주 고저 · MA50/200 박스 · 볼린저 상한 · 피봇 R1/R2 · 피보나치 파동 레벨을 실현 변동성(σ√기간)과 추세 점수로 종합한 참고 수치이며 투자 자문이 아닙니다. 도달 확률은 추세를 반영하지 않은 통계값입니다.</div>
     </section>
 
+    <section class="card ev-card">
+      <div class="card-hd"><i data-lucide="radio-tower"></i><h2>최근 기술적 신호</h2><span class="sub">최근 60거래일</span></div>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-hd"><i data-lucide="layers"></i><h2>시간대별 추세 비교</h2><span class="sub">일 · 주 · 월봉</span></div>
+      <div class="mtf" id="mtf"></div>
+    </section>
+
     <section class="card why-sec">
       <div class="card-hd"><i data-lucide="file-search"></i><h2>목표주가 산정 근거</h2><span class="sub">AI 상세 분석</span></div>
       <div class="why-card" id="reasons"></div>
     </section>
 
     <section class="card">
-      <div class="card-hd"><i data-lucide="activity"></i><h2>핵심 지표 리포트</h2></div>
+      <div class="card-hd"><i data-lucide="activity"></i><h2>핵심 지표 리포트</h2><span class="sub">? 를 누르면 설명</span></div>
       <div class="sig-list" id="signals"></div>
     </section>
 
@@ -291,18 +308,21 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20260928a"></script>
-<script src="assets/core/search.js?v=20260928a"></script>
-<script src="assets/core/events.js?v=20260928a"></script>
-<script src="assets/core/market-data.js?v=20260928a"></script>
-<script src="assets/core/indicators.js?v=20260928a"></script>
-<script src="assets/core/targets.js?v=20260928a"></script>
-<script src="assets/core/analysis.js?v=20260928a"></script>
-<script src="assets/core/news.js?v=20260928a"></script>
-<script src="assets/feed/mock.js?v=20260928a"></script>
-<script src="assets/feed/kis.js?v=20260928a"></script>
-<script src="assets/feed/toss.js?v=20260928a"></script>
-<script src="assets/feed/index.js?v=20260928a"></script>
-<script src="assets/app.js?v=20260928a"></script>
+<script src="assets/core/fx.js?v=20260929a"></script>
+<script src="assets/core/search.js?v=20260929a"></script>
+<script src="assets/core/events.js?v=20260929a"></script>
+<script src="assets/core/market-data.js?v=20260929a"></script>
+<script src="assets/core/indicators.js?v=20260929a"></script>
+<script src="assets/core/scoring.js?v=20260929a"></script>
+<script src="assets/core/patterns.js?v=20260929a"></script>
+<script src="assets/core/targets.js?v=20260929a"></script>
+<script src="assets/core/analysis.js?v=20260929a"></script>
+<script src="assets/core/backtest.js?v=20260929a"></script>
+<script src="assets/core/news.js?v=20260929a"></script>
+<script src="assets/feed/mock.js?v=20260929a"></script>
+<script src="assets/feed/kis.js?v=20260929a"></script>
+<script src="assets/feed/toss.js?v=20260929a"></script>
+<script src="assets/feed/index.js?v=20260929a"></script>
+<script src="assets/app.js?v=20260929a"></script>
 </body>
 </html>

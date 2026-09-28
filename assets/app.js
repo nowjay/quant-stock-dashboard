@@ -59,7 +59,7 @@
       try { const s = JSON.parse(localStorage.getItem(WL_KEY)); if (Array.isArray(s) && s.length) return s; } catch (e) {}
       return DEFAULT_WL.slice();
     })(),
-    ind: { ma:true, bb:false, rsi:true, macd:true, tgt:true },
+    ind: { ma:true, bb:false, rsi:true, macd:true, tgt:true, sig:true },
     ac: { open:false, items:[], sel:-1 }
   };
   function saveWL(){ try { localStorage.setItem(WL_KEY, JSON.stringify(state.watchlist)); } catch (e) {} }
@@ -87,7 +87,9 @@
     };
   }
   const chart = { price:null, rsi:null, macd:null, series:{}, ready:false };
-  let tgtLines = [], tgtKey = null, tgtRange = null;
+  let tgtLines = [], tgtKey = null, tgtRange = null, markKey = null;
+  /* 종목별 백테스트 결과 (종목 · 마지막 일봉 날짜가 같으면 재사용) */
+  let bt = { key:null, sig:null, tgt:null, pending:false };
   let syncing = false, timeIndex = new Map(), bars = [], ind = null, analysis = null;
 
   function buildCharts(){
@@ -219,8 +221,24 @@
     }
     $('#pane-rsi').style.display = state.ind.rsi ? '' : 'none';
     $('#pane-macd').style.display = state.ind.macd ? '' : 'none';
-    tgtKey = null;
+    tgtKey = null; markKey = null;
     paintTargetLines();
+    paintMarkers();
+  }
+  /* 차트 위 기술적 신호 마커 (골든/데드크로스 · 다이버전스 · 캔들 · 돌파) — 일·주·월봉 */
+  const MARK_TEXT = { cross:'크로스', div:'다이버전스', candle:'캔들', break:'돌파', volume:'거래량', macd:'MACD' };
+  function paintMarkers(){
+    if (!chart.ready) return;
+    const on = state.ind.sig && ind && (state.tf === '1D' || state.tf === '1W' || state.tf === '1M');
+    const evs = on ? QT.Patterns.detect(bars, ind, 150).filter(function (e) { return e.weight >= 2; }) : [];
+    const key = evs.map(function (e) { return e.i + e.kind + e.dir; }).join(',') + '|' + state.code + state.tf;
+    if (key === markKey) return;
+    markKey = key;
+    chart.series.candle.setMarkers(evs.slice().sort(function (a, b) { return a.t - b.t; }).map(function (e) {
+      const txt = e.kind === 'break' ? (e.dir > 0 ? '돌파' : '이탈') : e.kind === 'cross' ? (e.dir > 0 ? '골든' : '데드') : MARK_TEXT[e.kind];
+      return { time:sec(e.t), position: e.dir < 0 ? 'aboveBar' : 'belowBar', shape: e.dir > 0 ? 'arrowUp' : e.dir < 0 ? 'arrowDown' : 'circle',
+               color: e.dir > 0 ? COLORS.up : e.dir < 0 ? COLORS.down : '#8B95A1', text:txt };
+    }));
   }
   /* 차트 위 목표가(단기·중장기 Base) · 단기 손절가 가이드선 */
   function paintTargetLines(){
@@ -421,6 +439,50 @@
     icons();
   }
 
+  /* ---------------- 용어 설명 (? 버튼) ---------------- */
+  const GLOSS = {
+    score:'종합 점수: 추세 · 모멘텀 · 거래량 지표를 −100~+100으로 합산합니다. 추세가 뚜렷할 때(ADX 높음)는 추세 지표 비중을, 횡보장에서는 과매수·과매도 지표 비중을 높입니다.',
+    rsi:'RSI(상대강도지수): 최근 14일 상승폭과 하락폭의 비율(0~100). 70 이상 과매수, 30 이하 과매도. 강한 상승 추세에서는 70 이상이 오래 이어지기도 합니다.',
+    macd:'MACD: 12일과 26일 지수이동평균의 차이. 시그널선(9일 평균)을 위로 뚫으면 상승 힘이 붙는 것, 아래로 뚫으면 힘이 빠지는 것으로 봅니다.',
+    bb:'볼린저 밴드: 20일 평균 ± 표준편차×2. 주가의 약 95%가 밴드 안에서 움직이며, 밴드가 좁아지면 곧 큰 움직임이 나올 가능성이 큽니다.',
+    adx:'ADX: 추세의 "세기"(0~100). 25 이상이면 추세가 뚜렷하고 20 이하면 횡보입니다. 방향은 +DI(상승 힘)와 −DI(하락 힘) 중 큰 쪽으로 판단합니다.',
+    mfi:'MFI(자금흐름지수): 거래량까지 반영한 RSI. 80 이상은 돈이 과하게 몰린 과열, 20 이하는 빠져나간 침체로 봅니다.',
+    obv:'OBV: 오른 날의 거래량은 더하고 내린 날은 빼서 누적한 값. 주가보다 먼저 방향을 바꾸는 경우가 많아 수급 확인에 씁니다.',
+    ma:'이동평균선: 최근 N일 종가의 평균. 20일(약 한 달)·50일·200일(약 1년)선이 짧은 것부터 위에 놓이면 정배열(상승 추세)입니다.',
+    stoch:'스토캐스틱: 최근 14일 가격 범위에서 현재가가 어디쯤인지(0~100). 80 이상 과열, 20 이하 침체.',
+    cross:'골든크로스: 짧은 이동평균이 긴 이동평균을 위로 뚫는 것(상승 신호). 반대로 아래로 뚫으면 데드크로스입니다.',
+    div:'다이버전스: 주가와 지표가 반대로 움직이는 현상. 추세가 힘을 잃고 있다는 경고로 자주 쓰입니다.',
+    pivot:'피봇: 전날 고가·저가·종가로 계산한 오늘의 저항(R)·지지(S) 기준선입니다.',
+    mtf:'시간대별 비교: 같은 종목을 일봉·주봉·월봉으로 따로 분석합니다. 세 시간대가 같은 방향이면 추세의 신뢰도가 높습니다.',
+    bt:'백테스트: 같은 계산을 이 종목의 과거 날짜마다 적용해, 비슷한 신호 뒤 실제 주가가 어떻게 움직였는지 집계한 값입니다. 과거 성과가 미래를 보장하지는 않습니다.'
+  };
+  function tip(k){ return GLOSS[k] ? '<button type="button" class="tip" aria-label="용어 설명" data-tip="' + GLOSS[k] + '">?</button>' : ''; }
+  (function initTips(){
+    const box = document.createElement('div');
+    box.className = 'tipbox'; box.setAttribute('role', 'tooltip'); box.hidden = true;
+    document.body.appendChild(box);
+    let owner = null;
+    function show(btn){
+      owner = btn; box.textContent = btn.dataset.tip; box.hidden = false;
+      const r = btn.getBoundingClientRect(), w = Math.min(280, window.innerWidth - 24);
+      box.style.width = w + 'px';
+      const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
+      box.style.left = left + 'px';
+      const below = r.bottom + 8, h = box.offsetHeight;
+      box.style.top = (below + h > window.innerHeight - 8 ? r.top - h - 8 : below) + 'px';
+    }
+    function hide(){ owner = null; box.hidden = true; }
+    document.addEventListener('click', function (e) {
+      const b = e.target.closest('.tip');
+      if (b){ e.stopPropagation(); show(b); return; }           // 마우스 오버로 이미 열려 있어도 닫지 않음
+      if (!e.target.closest('.tipbox')) hide();
+    });
+    document.addEventListener('mouseover', function (e) { const b = e.target.closest && e.target.closest('.tip'); if (b && b !== owner) show(b); });
+    document.addEventListener('mouseout', function (e) { if (e.target.closest && e.target.closest('.tip') && owner) hide(); });
+    window.addEventListener('scroll', hide, true);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
+  })();
+
   /* ---------------- 분석 패널 ---------------- */
   function renderAnalysis(){
     const st = M.BY_CODE[state.code], a = analysis;
@@ -431,7 +493,16 @@
     const v = $('#verdict');
     v.textContent = a.verdict;
     v.className = 'verdict ' + (a.tone === 'bull' ? 'up' : a.tone === 'bear' ? 'down' : 'flat');
-    $('#verdict-why').textContent = '12개 지표 중 매수 ' + a.buy + ' · 매도 ' + a.sell + ' 우세';
+    const reg = a.regime === 'trend' ? '추세장' : a.regime === 'range' ? '횡보장' : a.regime === 'weak' ? '약한 추세' : '국면 판단 불가';
+    $('#verdict-why').innerHTML = '<span class="regime" data-r="' + a.regime + '">' + reg + (a.adx != null ? ' · ADX ' + a.adx.toFixed(0) : '') + '</span>' +
+      a.rows.length + '개 지표 중 매수 ' + a.buy + ' · 매도 ' + a.sell + tip('score');
+    $('#cats').innerHTML = Object.keys(QT.Scoring.CATS).map(function (k) {
+      const v = a.cats[k];
+      if (v == null) return '';
+      const sc = Math.round(v * 100), w = Math.min(50, Math.abs(sc) / 2);
+      return '<div class="cat"><span>' + QT.Scoring.CATS[k] + '</span><span class="bar"><i class="' + (sc >= 0 ? 'pos' : 'neg') + '" style="' +
+        (sc >= 0 ? 'left:50%' : 'right:50%') + ';width:' + w + '%"></i></span><b class="num ' + cls(sc) + '">' + (sc > 0 ? '+' : '') + sc + '</b></div>';
+    }).join('');
     $('#t-buy').textContent = a.buy; $('#t-neut').textContent = a.neutral; $('#t-sell').textContent = a.sell;
     $('#basis').textContent = ({ '1m':'일봉 기준', '5m':'일봉 기준', '1D':'일봉 기준', '1W':'주봉 기준', '1M':'월봉 기준' })[state.tf];
 
@@ -440,14 +511,14 @@
     sigs.push({
       tone: cross ? (cross.dir > 0 ? 'bull' : 'bear') : (a.align === 'up' ? 'bull' : a.align === 'down' ? 'bear' : 'neut'),
       icon: cross ? (cross.dir > 0 ? 'git-merge' : 'git-pull-request-closed') : 'chart-spline',
-      title:'이동평균선 크로스',
+      title:'이동평균선 크로스' + tip('ma'),
       tag: cross ? (cross.dir > 0 ? '골든크로스' : '데드크로스') + ' ' + (cross.ago === 0 ? '당일' : cross.ago + '봉 전') : '교차 없음',
       desc: (a.align === 'up' ? '20 · 50 · 200일선 정배열' : a.align === 'down' ? '20 · 50 · 200일선 역배열' : a.align === 'mixed' ? '이동평균선 혼조 배열' : '데이터 부족') +
         ' · 현재가는 20일선 ' + (a.ma20 != null && a.price >= a.ma20 ? '위' : '아래') + ', 200일선 ' + (a.ma200 != null ? (a.price >= a.ma200 ? '위' : '아래') : '—') + '에 위치합니다.'
     });
     sigs.push({
       tone: a.rsi == null ? 'neut' : a.rsi > 70 ? 'bear' : a.rsi < 30 ? 'bull' : 'neut',
-      icon:'gauge', title:'RSI (14)', tag: a.rsi != null ? a.rsi.toFixed(1) : '—',
+      icon:'gauge', title:'RSI (14)' + tip('rsi'), tag: a.rsi != null ? a.rsi.toFixed(1) : '—',
       desc: a.rsi == null ? '데이터가 충분하지 않습니다.'
         : a.rsi > 70 ? '70을 넘어선 과매수 구간입니다. 단기 조정 가능성을 감안해 분할 접근이 필요합니다.'
         : a.rsi < 30 ? '30 아래 과매도 구간입니다. 기술적 반등 시도가 나타날 수 있는 자리입니다.'
@@ -455,7 +526,7 @@
     });
     sigs.push({
       tone: (a.macd != null && a.macdSignal != null) ? (a.macd > a.macdSignal ? 'bull' : 'bear') : 'neut',
-      icon:'waves', title:'MACD (12, 26, 9)',
+      icon:'waves', title:'MACD (12, 26, 9)' + tip('macd'),
       tag: a.macdCross ? (a.macdCross.dir > 0 ? '골든크로스' : '데드크로스') + ' ' + (a.macdCross.ago === 0 ? '당일' : a.macdCross.ago + '봉 전') : '교차 없음',
       desc: (a.macd == null || a.macdSignal == null || a.macdHist == null) ? '데이터가 충분하지 않습니다.'
         : 'MACD ' + a.macd.toFixed(2) + ' / 시그널 ' + a.macdSignal.toFixed(2) + ' · 히스토그램 ' + (a.macdHist >= 0 ? '+' : '') + a.macdHist.toFixed(2) +
@@ -463,11 +534,30 @@
     });
     sigs.push({
       tone: a.bbPos == null ? 'neut' : a.bbPos > 95 ? 'bear' : a.bbPos < 5 ? 'bull' : 'neut',
-      icon:'move-vertical', title:'볼린저 밴드 (20, 2)', tag: a.bbPos != null ? a.bbPos.toFixed(0) + '%' : '—',
+      icon:'move-vertical', title:'볼린저 밴드 (20, 2)' + tip('bb'), tag: a.bbPos != null ? a.bbPos.toFixed(0) + '%' : '—',
       desc: a.bbPos == null ? '데이터가 충분하지 않습니다.'
         : '상단 ' + price(a.bbUp, st.cur) + ' · 하단 ' + price(a.bbLow, st.cur) + ' · 밴드폭 ' + a.bbWidth.toFixed(1) + '%' +
           (a.bbPos > 95 ? ' — 상단 밀착으로 과열 신호' : a.bbPos < 5 ? ' — 하단 밀착으로 낙폭 과대' : ' — 밴드 중심권에서 등락 중')
     });
+    if (a.adx != null){
+      const up = a.pdi >= a.mdi;
+      sigs.push({
+        tone: a.adx < 20 ? 'neut' : up ? 'bull' : 'bear', icon:'compass', title:'ADX · DMI (14)' + tip('adx'),
+        tag:'ADX ' + a.adx.toFixed(0) + (a.adx >= 25 ? ' · 강한 추세' : a.adx < 20 ? ' · 횡보' : ' · 약한 추세'),
+        desc:(a.adx >= 25 ? '추세가 뚜렷합니다. ' : a.adx < 20 ? '뚜렷한 추세가 없는 횡보 국면으로, 박스권 매매 신호가 더 잘 맞는 구간입니다. ' : '추세가 형성되는 중입니다. ') +
+          '+DI ' + a.pdi.toFixed(0) + ' / −DI ' + a.mdi.toFixed(0) + ' — ' + (up ? '상승' : '하락') + ' 쪽 힘이 더 큽니다.'
+      });
+    }
+    const obvC = a.rows.filter(function (r) { return r.key === 'obv'; })[0];
+    if (a.mfi != null || obvC){
+      const tone = obvC ? (obvC.v > 0.2 ? 'bull' : obvC.v < -0.2 ? 'bear' : 'neut') : 'neut';
+      sigs.push({
+        tone:tone, icon:'bar-chart-3', title:'수급 (MFI · OBV)' + tip('obv'),
+        tag:(a.mfi != null ? 'MFI ' + a.mfi.toFixed(0) : '') + (obvC ? ' · OBV ' + (obvC.v > 0.2 ? '상승' : obvC.v < -0.2 ? '하락' : '보합') : ''),
+        desc:(obvC ? (obvC.v > 0.2 ? '최근 20일 동안 오른 날 거래가 더 많아 매수세가 우위입니다. ' : obvC.v < -0.2 ? '최근 20일 동안 내린 날 거래가 더 많아 매도세가 우위입니다. ' : '매수·매도 거래량이 비슷합니다. ') : '') +
+          (a.mfi != null ? (a.mfi > 80 ? 'MFI가 80을 넘어 자금 유입이 과열됐습니다.' : a.mfi < 20 ? 'MFI가 20 아래로 자금이 과하게 빠져나갔습니다.' : 'MFI는 과열·침체 없이 정상 범위입니다.') : '')
+      });
+    }
     $('#signals').innerHTML = sigs.map(function (s) {
       return '<div class="sig ' + s.tone + '"><div class="ic"><i data-lucide="' + s.icon + '"></i></div>' +
         '<div class="tx"><b>' + s.title + '<em>' + s.tag + '</em></b><p>' + s.desc + '</p></div></div>';
@@ -487,11 +577,133 @@
         '<span class="vx">' + price(l.v, st.cur) + '</span><span class="pc ' + cls(l.d) + '">' + pct(l.d) + '</span></div>';
     }).join('');
 
+    ensureBacktest(st);
+    renderSummary(st, a);
     renderTargets(st, a);
     renderReasons(st, a);
+    renderEventList(a);
+    renderMTF(st, a);
     $('#tgt-updated').textContent = '일봉 기준 · ' + hhmmss(Date.now()).slice(0, 5) + ' 갱신';
     paintTargetLines();
+    paintMarkers();
     icons();
+  }
+
+  /* ---------------- 백테스트 (종목당 1회, 화면을 막지 않도록 지연 실행) ---------------- */
+  function ensureBacktest(st){
+    const daily = M.daily(st.code);
+    if (daily.length < 120) { bt = { key:null, sig:null, tgt:null, pending:false }; return; }
+    const d = new Date(daily[daily.length - 1].t);
+    const key = st.code + '|' + daily.length + '|' + d.getFullYear() + d.getMonth() + d.getDate();
+    if (bt.key === key) return;
+    bt = { key:key, sig:null, tgt:null, pending:true };
+    setTimeout(function () {
+      if (bt.key !== key) return;
+      try {
+        const bars0 = M.daily(st.code), ind0 = QT.Indicators.set(bars0);
+        bt.sig = QT.Backtest.signals(bars0, ind0, 10);
+        bt.tgt = QT.Backtest.targets(bars0, st);
+      } catch (e) { console.error(e); }
+      bt.pending = false;
+      if (bt.key === key && analysis && state.code === st.code){ renderSummary(st, analysis); renderTargets(st, analysis); icons(); }
+    }, 60);
+  }
+
+  /* ---------------- 한눈에 보기 ---------------- */
+  function renderSummary(st, a){
+    const d = a.daily, t = a.targets, p = d.price;
+    const heat = (d.rsi != null && d.rsi > 70) || (d.bbPos != null && d.bbPos > 100) ? 'hot' : (d.rsi != null && d.rsi < 30) ? 'cold' : '';
+    const trend = d.align === 'up' ? '중기 상승 추세' : d.align === 'down' ? '중기 하락 추세' : d.align === 'mixed' ? '방향을 탐색하는 혼조 구간' : '추세 판단에 필요한 데이터가 부족한 구간';
+    const strength = d.adx == null ? '' : d.adx >= 25 ? '로 추세가 뚜렷하고' : d.adx < 20 ? '이지만 추세 힘은 약하고(횡보)' : '이며 추세가 형성되는 중이고';
+    const heatTxt = heat === 'hot' ? ' 단기적으로는 과열 신호가 있습니다.' : heat === 'cold' ? ' 단기적으로는 과매도 구간입니다.' : ' 단기 과열·침체 신호는 없습니다.';
+    const head = trend + strength + (strength ? ',' : '') + heatTxt;
+
+    const s1 = t && t.supports[0], base = t && t.short.base, stop = t && t.short.stop;
+    let guide = '';
+    if (t){
+      if (d.score >= 18 && heat !== 'hot') guide = '상승 흐름을 따라가는 구간입니다. ' + (s1 ? '1차 지지선 <b>' + price(s1.v, st.cur) + '</b>을 지키는지 확인하고, ' : '') + '<b>' + price(stop.v, st.cur) + '</b> 아래로 내려가면 손절을 고려하세요.';
+      else if (d.score >= 18) guide = '추세는 좋지만 단기 과열입니다. 추격 매수보다 ' + (s1 ? '<b>' + price(s1.v, st.cur) + '</b> 부근까지 ' : '') + '눌림을 기다리는 편이 유리합니다.';
+      else if (d.score <= -18) guide = '하락 흐름입니다. 반등이 나와도 <b>' + price(base.v, st.cur) + '</b> 부근은 저항이 될 수 있어, 신규 매수는 추세 전환을 확인한 뒤가 안전합니다.';
+      else guide = '방향이 정해지지 않았습니다. <b>' + price(base.v, st.cur) + '</b> 위로 올라서면 상승, ' + (s1 ? '<b>' + price(s1.v, st.cur) + '</b> 아래로 내려가면 하락 신호로 보고 대응하세요.' : '지지선 이탈 시 하락 신호로 보고 대응하세요.');
+    }
+
+    const obvC = d.rows.filter(function (r) { return r.key === 'obv'; })[0];
+    const checks = [
+      [d.ma20 != null && p > d.ma20, '주가가 20일선 위', 'ma'],
+      [d.align === 'up', '이평선 정배열 (20 > 50 > 200일)', 'ma'],
+      [d.adx != null && d.adx >= 25 && d.pdi > d.mdi, '상승 추세가 뚜렷함 (ADX 25↑)', 'adx'],
+      [d.macd != null && d.macdSignal != null && d.macd > d.macdSignal, 'MACD가 시그널선 위', 'macd'],
+      [d.rsi != null && d.rsi >= 30 && d.rsi <= 70, 'RSI 과열·침체 아님 (30~70)', 'rsi'],
+      [!!obvC && obvC.v > 0, '거래량이 상승을 뒷받침 (OBV↑)', 'obv']
+    ];
+    const ok = checks.filter(function (c) { return c[0]; }).length;
+
+    let rel;
+    if (!M.isReal(st.code)) rel = '<div class="rel caution">과거 가격 경로가 시뮬레이션이라 신호 신뢰도를 계산하지 않았습니다.</div>';
+    else if (bt.pending || !bt.sig) rel = '<div class="rel">이 종목의 과거 데이터로 신호 신뢰도를 계산하는 중…</div>';
+    else {
+      const b = bt.sig, bear = b.cls < 0, n = b.same.n;
+      const hit = n ? (bear ? 1 - b.same.win : b.same.win) : null, baseHit = bear ? 1 - b.base.win : b.base.win;
+      const diff = hit != null ? (hit - baseHit) * 100 : 0;
+      const verdict = b.cls === 0 ? ['neut', '중립 신호는 방향을 예측하는 신호가 아니라 참고용 통계입니다.']
+        : n < 10 ? ['neut', '표본이 적어 판단 보류'] : diff >= 5 ? ['good', '이 종목에서 비교적 잘 맞았던 신호'] : diff <= -5 ? ['bad', '이 종목에서는 잘 맞지 않았던 신호 — 참고만 하세요'] : ['neut', '평균 수준의 신뢰도'];
+      rel = '<div class="rel ' + verdict[0] + '"><b>신호 신뢰도' + tip('bt') + '</b>' +
+        (n ? '최근 약 ' + Math.round(b.base.n / 250 * 12) + '개월간 <b>' + b.label + '</b> 신호 ' + n + '회 → ' + b.horizon + '거래일 뒤 ' +
+          (bear ? '하락' : '상승') + ' <b>' + Math.round(hit * 100) + '%</b> · 평균 수익률 <b class="' + cls(b.same.avg) + '">' + pct1(b.same.avg) + '</b>' +
+          ' <span class="muted">(같은 기간 아무 날이나 샀을 때 ' + (bear ? '하락' : '상승') + ' 비율 ' + Math.round(baseHit * 100) + '%)</span>'
+          : '같은 등급 신호가 과거에 없었습니다.') +
+        '<em>' + verdict[1] + '</em></div>';
+    }
+
+    $('#summary').innerHTML =
+      '<div class="sum-head"><span class="vchip ' + d.tone + '">' + d.verdict + '</span><p>' + head + '</p></div>' +
+      (guide ? '<div class="guide"><i data-lucide="navigation"></i><p>' + guide + '</p></div>' : '') +
+      '<div class="checks"><div class="checks-hd"><b>체크리스트</b><span>' + ok + ' / ' + checks.length + ' 충족</span></div>' +
+        checks.map(function (c) {
+          return '<div class="ck ' + (c[0] ? 'on' : 'off') + '"><i data-lucide="' + (c[0] ? 'check' : 'x') + '"></i><span>' + c[1] + '</span>' + tip(c[2]) + '</div>';
+        }).join('') + '</div>' + rel +
+      '<p class="sum-note">기술적 지표에 기반한 참고 정보이며 투자 권유가 아닙니다.</p>';
+  }
+
+  /* ---------------- 최근 기술적 신호 ---------------- */
+  const EV_KIND_TIP = { cross:'cross', div:'div', macd:'macd' };
+  function renderEventList(a){
+    const evs = (a.events || []).slice(0, 8), n = M.daily(state.code).length;
+    $('#events').innerHTML = evs.length ? evs.map(function (e) {
+      const ago = n - 1 - e.i, d = new Date(e.t);
+      return '<div class="evt ' + (e.dir > 0 ? 'bull' : e.dir < 0 ? 'bear' : 'neut') + '">' +
+        '<span class="ic"><i data-lucide="' + (e.dir > 0 ? 'arrow-up-right' : e.dir < 0 ? 'arrow-down-right' : 'minus') + '"></i></span>' +
+        '<div><b>' + e.title + tip(EV_KIND_TIP[e.kind]) + '</b><small>' + (ago === 0 ? '오늘' : ago + '거래일 전') + ' · ' + (d.getMonth() + 1) + '/' + d.getDate() + '</small>' +
+        '<p>' + e.desc + '</p></div></div>';
+    }).join('') : '<div class="empty">최근 60거래일 동안 눈에 띄는 기술적 신호가 없습니다.</div>';
+  }
+
+  /* ---------------- 시간대별 추세 비교 ---------------- */
+  function renderMTF(st, a){
+    const rows = [['일봉', a.daily]];
+    ['1W', '1M'].forEach(function (tf) {
+      const b = M.series(st.code, tf);
+      if (b.length >= 15) rows.push([tf === '1W' ? '주봉' : '월봉', A.core(b, st.cur)]);
+    });
+    const dirOf = function (x) { return x.score >= 18 ? 1 : x.score <= -18 ? -1 : 0; };
+    const ups = rows.filter(function (r) { return dirOf(r[1]) > 0; }).length, downs = rows.filter(function (r) { return dirOf(r[1]) < 0; }).length;
+    const head = ups === rows.length ? ['bull', rows.length + '개 시간대 모두 상승 우위 — 추세 신뢰도가 높습니다.']
+      : downs === rows.length ? ['bear', rows.length + '개 시간대 모두 하락 우위 — 반등이 나와도 짧을 수 있습니다.']
+      : !downs && ups ? ['bull', '하락 신호는 없고 ' + rows.length + '개 중 ' + ups + '개 시간대가 상승 우위입니다' + (dirOf(rows[0][1]) === 0 ? ' — 일봉은 숨 고르기 중입니다.' : '.')]
+      : !ups && downs ? ['bear', '상승 신호는 없고 ' + rows.length + '개 중 ' + downs + '개 시간대가 하락 우위입니다.']
+      : dirOf(rows[0][1]) > 0 && downs ? ['neut', '일봉은 상승이지만 큰 흐름(주·월봉)은 약합니다 — 단기 반등 성격일 수 있습니다.']
+      : dirOf(rows[0][1]) < 0 && ups ? ['neut', '일봉은 약하지만 큰 흐름은 상승입니다 — 상승 추세 속 조정일 수 있습니다.']
+      : ['neut', '시간대별 방향이 엇갈립니다 — 방향이 정해질 때까지 신중하게 보세요.'];
+    $('#mtf').innerHTML = '<p class="mtf-head ' + head[0] + '">' + head[1] + tip('mtf') + '</p>' +
+      '<div class="mtf-t"><div class="mtf-r hd"><span>시간대</span><span>이평선</span><span>RSI</span><span>MACD</span><span>의견</span></div>' +
+      rows.map(function (r) {
+        const x = r[1];
+        const al = x.align === 'up' ? ['up', '정배열'] : x.align === 'down' ? ['down', '역배열'] : x.ma20 != null ? (x.price >= x.ma20 ? ['up', '20선 위'] : ['down', '20선 아래']) : ['flat', '—'];
+        const macd = x.macd != null && x.macdSignal != null ? (x.macd > x.macdSignal ? ['up', '위'] : ['down', '아래']) : ['flat', '—'];
+        return '<div class="mtf-r"><span>' + r[0] + '</span><span class="' + al[0] + '">' + al[1] + '</span>' +
+          '<span class="num">' + (x.rsi != null ? x.rsi.toFixed(0) : '—') + '</span><span class="' + macd[0] + '">' + macd[1] + '</span>' +
+          '<span><em class="vchip sm ' + x.tone + '">' + x.verdict + '</em></span></div>';
+      }).join('') + '</div>';
   }
 
   /* ---------------- AI 목표주가 ---------------- */
@@ -500,6 +712,15 @@
   function dirIcon(d){ return d === 'up' ? 'trending-up' : d === 'down' ? 'trending-down' : 'move-horizontal'; }
   function dirCls(d){ return d === 'up' ? 'up' : d === 'down' ? 'down' : 'flat'; }
 
+  function btLine(which){
+    const b = bt.tgt;
+    if (bt.pending) return '<div class="bt-line">과거 적중률 계산 중…</div>';
+    if (!b || !b.n) return '';
+    const few = b.n < 20 ? ' <span class="muted">(표본 ' + b.n + '회로 적음)</span>' : '';
+    if (which === 'short') return '<div class="bt-line"><b>과거 적중률' + tip('bt') + '</b>같은 방식의 단기 목표가를 과거 ' + b.n + '개 시점에 적용했더니, 10거래일 안에 Base 도달 <b>' +
+      Math.round(b.base * 100) + '%</b> · Bull 도달 <b>' + Math.round(b.bull * 100) + '%</b> · 목표 전 손절선 먼저 <b class="down">' + Math.round(b.stopFirst * 100) + '%</b>' + few + '</div>';
+    return b.midBase != null ? '<div class="bt-line"><b>과거 적중률' + tip('bt') + '</b>과거 ' + b.midN + '개 시점 기준, 42거래일(약 2개월) 안에 중장기 Base 도달 <b>' + Math.round(b.midBase * 100) + '%</b>' + (b.midN < 20 ? ' <span class="muted">(표본 적음)</span>' : '') + '</div>' : '';
+  }
   function horizonHtml(h, dir, text, st, t){
     const lo = Math.min(h.stop.v, h.bear.v), hi = h.bull.v, span = (hi - lo) || 1;
     const x = function (v) { return Math.max(0, Math.min(100, (v - lo) / span * 100)).toFixed(1); };
@@ -525,6 +746,7 @@
           (v.prob != null ? '<small class="prob" title="변동성(σ√기간) 기준, 추세 미반영">도달확률 ~' + Math.round(v.prob * 100) + '%</small>' : '') +
         '</div>';
       }).join('') + '</div>' +
+      btLine(h === t.short ? 'short' : 'mid') +
       '<p class="hz-txt">' + text + '</p>' +
       '<div class="hz-foot"><span><i data-lucide="shield"></i>손절 <b class="num">' + price(h.stop.v, st.cur) + '</b> <em class="down num">' + pct1(h.stop.pct) + '</em></span>' +
         '<span>손익비 <b class="num">' + (h.rr != null ? '1 : ' + h.rr.toFixed(2) : '—') + '</b></span></div>' +
@@ -747,6 +969,8 @@
       ['#s-open','#s-high','#s-low','#s-vol','#s-52'].forEach(function (id) { $(id).textContent = '—'; });
       analysis = null; paintTargetLines();
       $('#targets').innerHTML = $('#reasons').innerHTML = '<div class="empty">시세 데이터가 없어 목표주가를 계산할 수 없습니다.</div>';
+      $('#summary').innerHTML = $('#events').innerHTML = $('#mtf').innerHTML = '<div class="empty">시세 데이터가 없어 분석할 수 없습니다.</div>';
+      markKey = null; if (chart.ready) chart.series.candle.setMarkers([]);
       $('#tgt-updated').textContent = '—';
       if (state.panel === 'macro') renderEarnings();
       return;
@@ -879,6 +1103,7 @@
     state.ind[k] = !state.ind[k];
     b.classList.toggle('on', state.ind[k]);
     if (k === 'tgt'){ paintTargetLines(); chart.price && chart.price.priceScale('right').applyOptions({ autoScale:true }); return; }
+    if (k === 'sig'){ paintMarkers(); return; }
     paintChart(false); renderLegend(null);
   });
 
