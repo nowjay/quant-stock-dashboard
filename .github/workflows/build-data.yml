@@ -1,0 +1,61 @@
+# 시세 · 일정 · 뉴스 데이터 수집
+#   tools/build_*.py 를 GitHub 러너에서 실행하고 바뀐 assets/data/*.json 을 같은 브랜치에 커밋합니다.
+#   · 수동 실행: Actions → build-data → Run workflow (기본 브랜치에 이 파일이 있어야 버튼이 보입니다)
+#   · 이 파일이나 수집기(tools/build_*.py)를 수정해 푸시하면 해당 브랜치에서 한 번 실행됩니다.
+name: build-data
+
+on:
+  workflow_dispatch:
+    inputs:
+      scripts:
+        description: '실행할 수집기 (공백 구분: us events news dataset)'
+        default: 'us events news'
+        required: true
+  push:
+    paths:
+      - '.github/workflows/build-data.yml'
+      - 'tools/build_*.py'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 수집기 실행
+        env:
+          TZ: Asia/Seoul
+          SCRIPTS: ${{ github.event.inputs.scripts || 'us events news' }}
+        run: |
+          status=0
+          for s in $SCRIPTS; do
+            echo "::group::build_$s.py"
+            python3 "tools/build_$s.py" || { echo "::warning::build_$s.py 실패 (exit $?)"; status=1; }
+            echo "::endgroup::"
+          done
+          echo "partial=$status" >> "$GITHUB_ENV"
+
+      - name: 변경된 데이터 커밋
+        run: |
+          git add assets/data
+          if git diff --cached --quiet; then
+            echo "데이터 변경 없음"
+            exit 0
+          fi
+          git diff --cached --stat
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "데이터 갱신 ($(date +%Y-%m-%d\ %H:%M) KST, build-data)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
