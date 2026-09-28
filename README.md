@@ -81,8 +81,18 @@ python3 tools/build_news.py         # 증시 뉴스 스냅샷 (실시간 피드 
 - 입력 즉시 드롭다운이 열리고 `↑↓` 이동, `Enter` 선택, `Esc` 닫기
 
 ### 기술적 분석 · AI 목표주가
-12개 지표(이동평균 6 + 오실레이터 6) 종합 점수 게이지, 골든/데드크로스, RSI 과매수·과매도,
-MACD 시그널 교차, 피봇 기준 지지·저항 2단계를 제공합니다.
+**한눈에 보기** 카드가 현재 상태를 쉬운 문장으로 요약하고, 상황별 대응 포인트(지지선·손절선 기준),
+6개 항목 체크리스트, 이 종목의 과거 데이터로 검증한 **신호 신뢰도**를 함께 보여 줍니다. 지표 이름 옆 `?`를 누르면 용어 설명이 나옵니다.
+
+- **국면 인식 종합 점수** (`assets/core/scoring.js`) — 지표를 추세·모멘텀·거래량으로 묶어 −100~+100으로 합산합니다.
+  ADX로 추세장/횡보장을 판단해, 추세장에서는 추세 지표 비중을 높이고 과매수 신호는 '과열 경고' 정도로만 반영합니다
+  (예전 방식은 이동평균 6개를 따로 세고, 강한 상승 중에도 RSI 70 이상을 무조건 매도로 셌습니다).
+- **추가 지표** — ADX·DMI(추세 세기), OBV(누적 거래량 흐름), MFI(거래량 반영 RSI)
+- **최근 기술적 신호** (`assets/core/patterns.js`) — 골든/데드크로스, MACD 교차, RSI 다이버전스, 장악형·망치형·유성형·도지 캔들,
+  20일 박스권 돌파/이탈(거래량 동반 여부), 거래량 급증. 주요 신호는 차트에 화살표로 표시(`신호` 토글)
+- **시간대별 추세 비교** — 일·주·월봉을 따로 분석해 방향이 일치하는지 보여 줍니다
+- **백테스트** (`assets/core/backtest.js`) — 같은 계산을 과거 각 날짜에 적용해(미래 데이터 미사용)
+  비슷한 신호 뒤 10거래일 수익률, 과거 목표가의 실제 도달률·손절선 선도달률을 종목별로 표시합니다
 
 **AI 목표주가**는 단기(1~2주) · 중장기(1~3개월)로 나누어 `보수적(Bear) · 기본(Base) · 공격적(Bull)` 3개 시나리오와
 현재가 대비 상승 여력(%)을 보여 줍니다. 산정 방식(`assets/core/targets.js`, 항상 일봉 기준):
@@ -107,8 +117,11 @@ Base·Bull은 항상 현재가 위이며, 현재가 아래 목표는 추세가 �
 index.html                     화면 마크업
 assets/css/app.css             라이트 테마 토큰 · 레이아웃
 assets/core/market-data.js     종목 마스터 · 시세 · 봉 집계 · 틱 반영
-assets/core/indicators.js      SMA/EMA/볼린저/RSI/MACD/Stoch/CCI/Williams/ATR
-assets/core/analysis.js        종합 점수 · 크로스 · 피봇 · 전망 문장
+assets/core/indicators.js      SMA/EMA/볼린저/RSI/MACD/Stoch/CCI/Williams/ATR/ADX/OBV/MFI
+assets/core/analysis.js        종합 분석 조립 · 크로스 · 피봇 · 전망 문장
+assets/core/scoring.js         국면(ADX) 인식 종합 점수 · 추세/모멘텀/거래량 그룹
+assets/core/patterns.js        크로스 · 다이버전스 · 캔들 패턴 · 박스권 돌파 감지
+assets/core/backtest.js        종목별 신호 신뢰도 · 목표가 적중률 백테스트
 assets/core/targets.js         파동 기반 목표주가(Bear/Base/Bull) · 손절가 · 산정 근거
 assets/core/search.js          초성 포함 검색 인덱스
 assets/core/events.js          매크로 일정 · 실적 시즌 캘린더 (확정·규칙·예상, 한국시간)

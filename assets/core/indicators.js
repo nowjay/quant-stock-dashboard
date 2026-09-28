@@ -94,6 +94,60 @@ window.QT = window.QT || {};
     });
     return ema(tr, p);
   }
+  /* Wilder 평활 (RMA) — 첫 값은 p개 단순평균 */
+  function rma(a, p, from){
+    const out = new Array(a.length).fill(null);
+    const st = from || 0;
+    if (a.length - st < p) return out;
+    let s = 0; for (let i = st; i < st + p; i++) s += a[i];
+    let prev = s / p; out[st + p - 1] = prev;
+    for (let i = st + p; i < a.length; i++){ prev = (prev * (p - 1) + a[i]) / p; out[i] = prev; }
+    return out;
+  }
+  /* ADX · +DI · −DI (Wilder, 14) — 추세의 '세기'와 방향 */
+  function adx(bars, p){
+    const n = bars.length, tr = new Array(n).fill(0), pdm = new Array(n).fill(0), mdm = new Array(n).fill(0);
+    for (let i = 1; i < n; i++){
+      const up = bars[i].h - bars[i-1].h, dn = bars[i-1].l - bars[i].l;
+      pdm[i] = up > dn && up > 0 ? up : 0;
+      mdm[i] = dn > up && dn > 0 ? dn : 0;
+      tr[i] = Math.max(bars[i].h - bars[i].l, Math.abs(bars[i].h - bars[i-1].c), Math.abs(bars[i].l - bars[i-1].c));
+    }
+    const str = rma(tr, p, 1), spd = rma(pdm, p, 1), smd = rma(mdm, p, 1);
+    const pdi = new Array(n).fill(null), mdi = new Array(n).fill(null), dx = new Array(n).fill(0);
+    let first = -1;
+    for (let i = 0; i < n; i++){
+      if (str[i] == null || !str[i]) continue;
+      pdi[i] = spd[i] / str[i] * 100; mdi[i] = smd[i] / str[i] * 100;
+      const sum = pdi[i] + mdi[i];
+      dx[i] = sum ? Math.abs(pdi[i] - mdi[i]) / sum * 100 : 0;
+      if (first < 0) first = i;
+    }
+    return { adx: first < 0 ? new Array(n).fill(null) : rma(dx, p, first), pdi:pdi, mdi:mdi };
+  }
+  /* OBV — 상승일 거래량 누적 − 하락일 거래량 누적 */
+  function obv(bars){
+    const out = new Array(bars.length).fill(0);
+    for (let i = 1; i < bars.length; i++){
+      const v = bars[i].v || 0, d = bars[i].c - bars[i-1].c;
+      out[i] = out[i-1] + (d > 0 ? v : d < 0 ? -v : 0);
+    }
+    return out;
+  }
+  /* MFI — 거래량을 반영한 RSI (14) */
+  function mfi(bars, p){
+    const n = bars.length, out = new Array(n).fill(null);
+    const tp = bars.map(function (b) { return (b.h + b.l + b.c) / 3; });
+    for (let i = p; i < n; i++){
+      let pos = 0, neg = 0;
+      for (let j = i - p + 1; j <= i; j++){
+        const f = tp[j] * (bars[j].v || 0);
+        if (tp[j] > tp[j-1]) pos += f; else if (tp[j] < tp[j-1]) neg += f;
+      }
+      out[i] = neg === 0 ? (pos === 0 ? 50 : 100) : 100 - 100 / (1 + pos / neg);
+    }
+    return out;
+  }
   /* 두 시계열의 최근 교차: dir 1 = a가 b를 상향 돌파, ago = 최근 봉 기준 경과 봉수 */
   function lastCross(a, b, lookback){
     const n = Math.min(a.length, b.length), start = Math.max(1, n - lookback);
@@ -107,17 +161,19 @@ window.QT = window.QT || {};
   }
   function set(bars){
     const c = bars.map(function (b) { return b.c; });
-    const bb = bollinger(c, 20, 2), md = macd(c, 12, 26, 9);
+    const bb = bollinger(c, 20, 2), md = macd(c, 12, 26, 9), dm = adx(bars, 14);
     return {
       close:c,
       sma5:sma(c,5), sma10:sma(c,10), sma20:sma(c,20), sma50:sma(c,50),
       sma60:sma(c,60), sma120:sma(c,120), sma200:sma(c,200), ema20:ema(c,20),
       bbUp:bb.up, bbMid:bb.mid, bbLow:bb.lo,
       rsi:rsi(c,14), macd:md.line, macdSignal:md.signal, macdHist:md.hist,
-      stoch:stochastic(bars,14,3), cci:cci(bars,20), wr:williamsR(bars,14), atr:atr(bars,14)
+      stoch:stochastic(bars,14,3), cci:cci(bars,20), wr:williamsR(bars,14), atr:atr(bars,14),
+      adx:dm.adx, pdi:dm.pdi, mdi:dm.mdi, obv:obv(bars), mfi:mfi(bars,14),
+      vol:bars.map(function (b) { return b.v || 0; })
     };
   }
 
   QT.Indicators = { sma:sma, ema:ema, bollinger:bollinger, rsi:rsi, macd:macd,
-    stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, lastCross:lastCross, set:set };
+    stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, adx:adx, obv:obv, mfi:mfi, lastCross:lastCross, set:set };
 })(window.QT);
