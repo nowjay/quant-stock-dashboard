@@ -4,10 +4,15 @@
    [데이터 계층]
      1) assets/data/symbols.json  국내 전종목(KOSPI/KOSDAQ/ETF) + 미국 S&P500/NASDAQ100 마스터
      2) assets/data/quotes.json   종목별 최근 종가·등락 (수집 시점 기준 실제 값)
-     3) assets/data/history.json  대표 종목의 실제 일봉 (네이버 금융 / Yahoo Finance)
-     · history 가 없는 종목은 '실제 최근 종가'를 기준점으로 경로만 시뮬레이션하고
+     3) assets/data/krx/          공공데이터포털 '금융위원회_주식시세정보' (배포 워크플로가 생성)
+          quotes.json   최근 거래일 전 종목 종가 — 국내 종목의 시세는 이 값이 우선
+          d/<코드>.json  종목별 수정주가 일봉 — 종목을 열 때 받는다 (ensureDaily)
+        토스증권이 연결되면 공공데이터 마지막 날 이후의 거래일과 실시간 체결만 덧붙인다 (appendDaily)
+     4) assets/data/history.json  대표 종목의 실제 일봉 (네이버 금융 / Yahoo Finance) — 공공데이터가 없는 종목용
+     5) assets/data/fundamentals.json  재무 · 가치분석 (fundamentals.js 가 사용)
+     · 일봉이 없는 종목은 '실제 최근 종가'를 기준점으로 경로만 시뮬레이션하고
        화면에 '시뮬레이션'으로 표기합니다. (가격 수준은 실제와 일치)
-     · 분봉은 실시간 체결 연동 전까지 일봉에서 파생한 시뮬레이션입니다.
+     · 분봉은 토스증권 연결 시 실제 1분봉, 그 외에는 일봉에서 파생한 시뮬레이션입니다.
    ============================================================= */
 window.QT = window.QT || {};
 (function (QT) {
@@ -38,8 +43,13 @@ window.QT = window.QT || {};
   const BY_CODE = {};
   const QUOTES = {};
   const REAL_BARS = {};
-  const REAL_SRC = {};                 // 실제 일봉 출처: 'bundle'(history.json) | 'toss'(토스증권 Open API)
+  const REAL_SRC = {};                 // 실제 일봉 출처: 'krx'(공공데이터) | 'krx+toss' | 'bundle'(history.json) | 'toss'
   let META = { symbols:null, quotes:null, history:null, source:'seed' };
+
+  /* 공공데이터포털 금융위원회 시세 — items: 최근 거래일 종가, top: 스크리너 대상(시가총액 상위) */
+  const KRX = { dir:'', basDt:null, first:null, source:'', etf:false, count:0,
+                items:{}, top:{}, loaded:{}, failed:{}, pending:{}, lastT:{}, bundle:{} };
+  const KRX_TOP = { stock:150, etf:40 };
 
   function register(row){
     const st = {
@@ -157,7 +167,7 @@ window.QT = window.QT || {};
   }
 
   /* ---------- 캐시 ---------- */
-  const DAILY = {}, MIN = {}, DERIVED = {};
+  const DAILY = {}, MIN = {}, MIN_SRC = {}, DERIVED = {};
   function daily(code){
     if (DAILY[code]) return DAILY[code];
     const st = BY_CODE[code];
@@ -178,25 +188,66 @@ window.QT = window.QT || {};
     return DERIVED[key];
   }
   function dropDerived(code){ ['5m','1W','1M'].forEach(function (tf) { delete DERIVED[code + '|' + tf]; }); }
+  /* 일봉이 바뀌면 파생 데이터를 다시 만든다 (토스에서 받은 실제 분봉은 그대로 둠) */
+  function resetDaily(code){ delete DAILY[code]; if (!MIN_SRC[code]) delete MIN[code]; dropDerived(code); }
+  function quoteFromBars(code, rows){
+    const last = rows[rows.length - 1], prev = rows[rows.length - 2];
+    QUOTES[code] = { p:last[4], d: prev ? last[4] - prev[4] : 0, r: prev ? (last[4] - prev[4]) / prev[4] * 100 : 0, v:last[5] };
+  }
   function isReal(code){ return !!REAL_BARS[code]; }
   function realSource(code){ return REAL_SRC[code] || null; }
   /* 시세가 수집된 종목인지 — 없으면 화면에서 값을 만들어내지 않습니다 */
   function hasData(code){ return !!REAL_BARS[code] || !!(QUOTES[code] && QUOTES[code].p > 0); }
 
-  /* ---------- 실시간 틱 반영 ---------- */
-  function applyTick(code, price, volDelta){
+  /* ---------- 거래일 ----------
+     일봉 시각 규칙: 국내 15:30 KST(= 06:30 UTC), 미국 0시 UTC — 둘 다 UTC 날짜가 곧 거래일 */
+  const DAY_FMT = {};
+  function marketDay(ts, us){
+    const tz = us ? 'America/New_York' : 'Asia/Seoul';
+    const f = DAY_FMT[tz] || (DAY_FMT[tz] = new Intl.DateTimeFormat('en-CA', { timeZone:tz, year:'numeric', month:'2-digit', day:'2-digit' }));
+    return f.format(new Date(ts));
+  }
+  function barDay(t){ return new Date(t).toISOString().slice(0, 10); }
+  function dayStamp(day, us){
+    const y = +day.slice(0, 4), m = +day.slice(5, 7) - 1, d = +day.slice(8, 10);
+    return us ? Date.UTC(y, m, d) : Date.UTC(y, m, d, 6, 30);
+  }
+
+  /* ---------- 실시간 틱 반영 ----------
+     live: 증권사 실제 체결 — 체결 시각의 거래일로 봉을 고른다. 마지막 봉보다 새 거래일이면 봉을 새로 연다
+           (공공데이터는 전 영업일까지만 있어서 오늘 체결을 어제 봉에 덮어쓰면 안 됨)
+     모의 시세는 예전처럼 마지막 봉만 움직인다. */
+  function applyTick(code, price, volDelta, ts, live){
     const st = BY_CODE[code]; if (!st) return;
+    if (needsDaily(code)){                             // 공공데이터 일봉을 받기 전 — 시세만 (대비는 공공데이터 종가 기준)
+      const it = KRX.items[code], q = QUOTES[code];
+      if (q && it && it.p){ q.p = price; q.d = price - it.p; q.r = (price - it.p) / it.p * 100; }
+      return;
+    }
     const d = daily(code); if (!d.length) return;
-    const last = d[d.length - 1], p = price;          // 실제 체결가는 그대로 (모의 시세는 생성 시 호가 단위로 맞춤)
+    let last = d[d.length - 1];
+    const p = price;                                   // 실제 체결가는 그대로 (모의 시세는 생성 시 호가 단위로 맞춤)
+    if (live){
+      const us = st.cur === 'USD', day = marketDay(ts || Date.now(), us), lastDay = barDay(last.t);
+      if (day < lastDay) return;                       // 이전 거래일의 늦은 체결
+      if (day > lastDay){
+        last = { t:dayStamp(day, us), o:p, h:p, l:p, c:p, v:0 };
+        d.push(last);
+        dropDerived(code);
+      } else if (KRX.lastT[code] && last.t <= KRX.lastT[code]) {
+        return;                                        // 공공데이터 확정 종가는 건드리지 않는다
+      }
+    }
     last.c = p; last.h = Math.max(last.h, p); last.l = Math.min(last.l, p);
     last.v += Math.max(0, Math.round(volDelta || 0));
     const q = QUOTES[code];
     if (q){ const prev = d[d.length - 2]; q.p = p; if (prev){ q.d = p - prev.c; q.r = (p - prev.c) / prev.c * 100; } }
     const m = MIN[code];
     if (m && m.length){
-      const lastM = m[m.length - 1], now = Date.now();
-      if (now - lastM.t >= 60000){
-        m.push({ t: lastM.t + 60000, o:p, h:p, l:p, c:p, v: Math.max(1, Math.round(volDelta || 0)) });
+      const lastM = m[m.length - 1], mt = Math.floor((live && ts ? ts : Date.now()) / 60000) * 60000;
+      if (mt < lastM.t) { dropDerived(code); return; }
+      if (mt > lastM.t){
+        m.push({ t: live ? mt : lastM.t + 60000, o:p, h:p, l:p, c:p, v: Math.max(1, Math.round(volDelta || 0)) });
         if (m.length > M_PER_DAY * 6) m.shift();
       } else {
         lastM.c = p; lastM.h = Math.max(lastM.h, p); lastM.l = Math.min(lastM.l, p);
@@ -211,11 +262,89 @@ window.QT = window.QT || {};
     if (!BY_CODE[code] || !bars || !bars.length) return false;
     REAL_BARS[code] = bars.map(function (b) { return [b.t, b.o, b.h, b.l, b.c, b.v]; });
     REAL_SRC[code] = source || 'api';
-    delete DAILY[code]; delete MIN[code]; dropDerived(code);
-    const last = bars[bars.length - 1], prev = bars[bars.length - 2];
-    QUOTES[code] = { p:last.c, d: prev ? last.c - prev.c : 0, r: prev ? (last.c - prev.c) / prev.c * 100 : 0, v:last.v };
+    resetDaily(code);
+    quoteFromBars(code, REAL_BARS[code]);
     return true;
   }
+
+  /* ---------- 공공데이터 일봉 ---------- */
+  function hasKrx(code){ return !!KRX.items[code]; }
+  function isKrxTop(code){ return !!KRX.top[code]; }
+  function needsDaily(code){ return !!KRX.items[code] && !KRX.loaded[code] && !KRX.failed[code]; }
+  /** 종목별 공공데이터 일봉을 받아 둔다 — 이미 있거나 대상이 아니면 바로 끝남 */
+  function ensureDaily(code){
+    if (!needsDaily(code)) return Promise.resolve(false);
+    if (KRX.pending[code]) return KRX.pending[code];
+    const p = jget(KRX.dir + 'd/' + encodeURIComponent(code) + '.json').then(function (rows) {
+      if (!Array.isArray(rows) || rows.length < 2) throw new Error('일봉 없음');
+      REAL_BARS[code] = rows; REAL_SRC[code] = 'krx';
+      KRX.loaded[code] = true;
+      KRX.lastT[code] = rows[rows.length - 1][0];
+      resetDaily(code);
+      quoteFromBars(code, rows);
+      const it = KRX.items[code];
+      if (it) QUOTES[code] = { p:it.p, d:it.d, r:it.r, v:it.v };   // 전일 대비는 거래소 공식 값
+      return true;
+    }).catch(function (e) {
+      KRX.failed[code] = true;
+      console.warn('[QT] 공공데이터 일봉 없음', code, e.message);
+      if (KRX.bundle[code] && !REAL_BARS[code]){           // 미뤄 둔 번들 일봉으로 대체
+        REAL_BARS[code] = KRX.bundle[code]; REAL_SRC[code] = 'bundle'; resetDaily(code);
+      }
+      return false;
+    }).then(function (ok) { delete KRX.pending[code]; return ok; });
+    KRX.pending[code] = p;
+    return p;
+  }
+  /** 여러 종목을 동시에 limit 개씩 */
+  function ensureMany(codes, limit){
+    const todo = codes.filter(needsDaily);
+    let i = 0;
+    function next(){ return i < todo.length ? ensureDaily(todo[i++]).then(next) : Promise.resolve(); }
+    const workers = [];
+    for (let k = 0; k < Math.min(limit || 6, todo.length); k++) workers.push(next());
+    return Promise.all(workers).then(function () { return todo.length; });
+  }
+  /** 공공데이터 일봉 뒤에 증권사 일봉을 잇는다 — 공공데이터 마지막 거래일 이후 봉만 사용 */
+  function appendDaily(code, bars, source){
+    const base = REAL_BARS[code], lastT = KRX.lastT[code];
+    if (!KRX.loaded[code] || !base || !lastT || !bars) return false;
+    const keep = base.filter(function (r) { return r[0] <= lastT; });
+    const add = bars.filter(function (b) { return b.t > lastT && b.c > 0; })
+      .map(function (b) { return [b.t, b.o, b.h, b.l, b.c, b.v]; });
+    REAL_BARS[code] = keep.concat(add);
+    REAL_SRC[code] = add.length ? 'krx+' + (source || 'api') : 'krx';
+    resetDaily(code);
+    if (add.length) quoteFromBars(code, REAL_BARS[code]);
+    return true;
+  }
+  function applyKrx(kx, dir){
+    KRX.dir = dir + 'krx/'; KRX.basDt = kx.basDt; KRX.first = kx.first; KRX.source = kx.source || '';
+    KRX.etf = !!kx.etf; KRX.count = kx.count || 0;
+    const rank = { stock:[], etf:[] };
+    Object.keys(kx.items).forEach(function (code) {
+      const it = kx.items[code];
+      if (!BY_CODE[code]) register({ c:code, n:it.n, m:it.m, t:it.t, cur:'KRW' });   // 마스터에 없는 신규 상장
+      KRX.items[code] = it;
+      QUOTES[code] = { p:it.p, d:it.d, r:it.r, v:it.v };
+      (rank[it.t] || rank.stock).push(code);
+    });
+    Object.keys(rank).forEach(function (t) {
+      rank[t].sort(function (a, b) { return (KRX.items[b].mc || 0) - (KRX.items[a].mc || 0); })
+        .slice(0, KRX_TOP[t]).forEach(function (c) { KRX.top[c] = true; });
+    });
+  }
+  function krxMeta(){ return KRX.basDt ? { basDt:KRX.basDt, first:KRX.first, source:KRX.source, etf:KRX.etf, count:KRX.count } : null; }
+
+  /* 토스증권 실제 1분봉 — [{t,o,h,l,c,v}] 오래된 순 */
+  function setMinutes(code, bars, source){
+    if (!BY_CODE[code] || !bars || !bars.length) return false;
+    MIN[code] = bars.map(function (b) { return { t:b.t, o:b.o, h:b.h, l:b.l, c:b.c, v:b.v }; });
+    MIN_SRC[code] = source || 'api';
+    dropDerived(code);
+    return true;
+  }
+  function minuteSource(code){ return MIN_SRC[code] || null; }
 
   /* 목록 렌더링용 경량 시세 — 히스토리를 만들지 않고 수집된 종가만 사용 */
   function lightQuote(code){
@@ -257,9 +386,10 @@ window.QT = window.QT || {};
     const dir = baseDir || 'assets/data/';
     return Promise.all([
       jget(dir + 'symbols.json').catch(function () { return null; }),
-      jget(dir + 'quotes.json').catch(function () { return null; })
+      jget(dir + 'quotes.json').catch(function () { return null; }),
+      jget(dir + 'krx/quotes.json').catch(function () { return null; })   // 배포본에만 있음
     ]).then(function (res) {
-      const sym = res[0], q = res[1];
+      const sym = res[0], q = res[1], kx = res[2];
       if (q && q.items) Object.keys(q.items).forEach(function (k) { QUOTES[k] = q.items[k]; });
       if (sym && sym.items && sym.items.length){
         sym.items.forEach(register);
@@ -268,13 +398,15 @@ window.QT = window.QT || {};
         SEED.forEach(function (r) { register(r); if (!QUOTES[r.c]) QUOTES[r.c] = { p:r.p, d:0, r:0, v:0 }; });
         META = { source:'seed', count:SEED.length, real:0 };
       }
+      if (kx && kx.items){ applyKrx(kx, dir); META.krx = krxMeta(); META.count = UNIVERSE.length; }
 
       jget(dir + 'history.json').then(function (h) {
         if (!h || !h.items) return;
         Object.keys(h.items).forEach(function (k) {
           if (REAL_SRC[k] && REAL_SRC[k] !== 'bundle') return;  // 이미 API 일봉을 받았으면 유지
+          if (KRX.items[k] && !KRX.failed[k]){ KRX.bundle[k] = h.items[k]; return; }   // 국내 종목은 공공데이터 일봉 우선
           REAL_BARS[k] = h.items[k]; REAL_SRC[k] = 'bundle';
-          delete DAILY[k]; delete MIN[k]; dropDerived(k);        // 시뮬레이션 캐시 무효화
+          resetDaily(k);                                         // 시뮬레이션 캐시 무효화
         });
         META.history = h.updated; META.real = Object.keys(REAL_BARS).length;
         emitLate('history');
@@ -287,6 +419,13 @@ window.QT = window.QT || {};
         emitLate('events');
       }).catch(function () {});
 
+      jget(dir + 'fundamentals.json').then(function (fd) {
+        if (!fd || !QT.Fund) return;
+        QT.Fund.load(fd);
+        META.fundamentals = fd.updated;
+        emitLate('fundamentals');
+      }).catch(function () {});
+
       return META;
     });
   }
@@ -296,6 +435,8 @@ window.QT = window.QT || {};
     init:init, daily:daily, series:series, aggregate:aggregate,
     applyTick:applyTick, snapshot:snapshot, lightQuote:lightQuote, isReal:isReal, hasData:hasData, onLate:onLate,
     setDaily:setDaily, realSource:realSource,
+    hasKrx:hasKrx, isKrxTop:isKrxTop, needsDaily:needsDaily, ensureDaily:ensureDaily, ensureMany:ensureMany,
+    appendDaily:appendDaily, krxMeta:krxMeta, setMinutes:setMinutes, minuteSource:minuteSource,
     meta: function (){ return META; }
   };
 })(window.QT);

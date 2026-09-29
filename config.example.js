@@ -2,7 +2,7 @@
    ⚠️ 브라우저에 두는 키는 페이지를 여는 누구에게나 노출됩니다.
       운영 환경에서는 토큰을 서버에 두고 proxyBase / wsUrl(wss) 만 지정하세요. */
 window.QT_CONFIG = {
-  provider: 'mock',              // 'mock' | 'kis' | 'toss'  — 실패 시 자동으로 mock 폴백
+  provider: 'static',            // 'static'(공공데이터 종가) | 'toss' | 'kis' | 'mock'(데모) — 실패 시 static 으로
 
   // 한국투자증권 KIS — 실시간 체결가 WebSocket (H0STCNT0)
   kis: {

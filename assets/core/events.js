@@ -14,7 +14,11 @@ window.QT = window.QT || {};
   const DAY = 86400000, HOUR = 3600000, KST = 9 * HOUR;
 
   let DB = { macro:[], earnings:[], symbols:{} };
+  let EXTRA = [];
   function load(db){ if (db) DB = { macro:db.macro || [], earnings:db.earnings || [], symbols:db.symbols || {} }; }
+  /* 이번 주 발표 일정 보강 (markets.json 의 ForexFactory 캘린더) — 같은 달 확정 일정이 없을 때
+     규칙으로 추정한 날짜를 실제 예정 시각으로 바로잡는다 */
+  function supplement(list){ EXTRA = (list || []).filter(function (e) { return e.kind && isFinite(e.t); }); }
 
   /* ---------- 달력 연산 (UTC 기준 날짜 객체 {y, m, d}) ---------- */
   function ymd(y, m, d){ const x = new Date(Date.UTC(y, m, d)); return { y:x.getUTCFullYear(), m:x.getUTCMonth(), d:x.getUTCDate() }; }
@@ -184,6 +188,10 @@ window.QT = window.QT || {};
     DB.macro.forEach(function (e) {
       fromDB(e).forEach(function (x) { confirmed[mkey(x.kind, x.t)] = 1; if (x.t >= from && x.t < to) out.push(x); });
     });
+    EXTRA.forEach(function (e) {
+      if (confirmed[mkey(e.kind, e.t)]) return;
+      fromDB(e).forEach(function (x) { confirmed[mkey(x.kind, x.t)] = 1; if (x.t >= from && x.t < to) out.push(x); });
+    });
 
     const base = kst(now);
     for (let i = -1; i <= 5; i++){
@@ -298,8 +306,11 @@ window.QT = window.QT || {};
     return isFinite(v) && v > 0 ? { target:v, recomm:s.recommMean, asOf:s.asOf } : null;
   }
 
+  /* 국내 증시가 열리는 날인지 (주말 · 휴장일 제외, KST 기준) */
+  function krTradingDay(t){ const p = kst(t); return krOpen(ymd(p.y, p.m, p.d)); }
+
   QT.Events = {
-    load:load, macro:macro, earnings:earnings, weekOf:weekOf, consensus:consensus,
-    fmtDate:fmtDate, fmtMD:fmtMD, fmtTime:fmtTime, dday:dday, countdown:countdown
+    load:load, supplement:supplement, macro:macro, earnings:earnings, weekOf:weekOf, consensus:consensus,
+    fmtDate:fmtDate, fmtMD:fmtMD, fmtTime:fmtTime, dday:dday, dayNo:dayNo, countdown:countdown, krTradingDay:krTradingDay
   };
 })(window.QT);

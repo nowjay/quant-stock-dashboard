@@ -4,21 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>QUANT 주식 대시보드</title>
-<meta name="description" content="관심종목 · 실시간 캔들 차트 · AI 목표주가 분석 · 글로벌 매크로 일정 대시보드">
+<meta name="description" content="글로벌 지수 전광판 · 환율 · 원자재 · 금리 · 공포/탐욕 지수 · 매크로 D-Day · 실시간 캔들 차트 · AI 목표주가 · 재무 가치분석 · 추천 종목 스크리너 대시보드">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20260929d">
+<link rel="stylesheet" href="assets/css/app.css?v=20260929k">
 </head>
-<body>
+<body data-view="home">
+<script>/* 마지막으로 본 화면을 먼저 적용해 깜빡임을 막는다 (app.js 의 VIEW_KEY) */
+  try { if (localStorage.getItem('qt.view.v1') === 'stock') document.body.dataset.view = 'stock'; } catch (e) {}</script>
 
 <header class="topbar">
   <button class="icon-btn menu-btn" id="menu-btn" aria-label="관심종목 열기"><i data-lucide="menu"></i></button>
-  <div class="logo"><span class="dot"><i data-lucide="candlestick-chart"></i></span>QUANT</div>
+  <div class="logo"><span class="dot"><i data-lucide="candlestick-chart"></i></span><span class="logo-t">QUANT</span></div>
+  <nav class="vnav" id="vnav" aria-label="화면 전환">
+    <button data-view="home" class="on"><i data-lucide="layout-dashboard"></i>홈</button>
+    <button data-view="stock"><i data-lucide="candlestick-chart"></i><span class="vn-l">종목 분석</span><span class="vn-s">분석</span></button>
+  </nav>
   <div class="grow"></div>
   <div class="feed-pill" id="feed-pill" data-mode="connecting"><span class="led"></span><span id="feed-text">연결 중</span></div>
   <button class="icon-btn" id="settings-btn" aria-label="API 연결 설정"><i data-lucide="settings"></i></button>
 </header>
+
+<!-- ==================== 글로벌 지수 전광판 ==================== -->
+<section class="tk" id="tk" aria-label="글로벌 주요 지수">
+  <div class="tk-wrap">
+    <button class="tk-nav prev" id="tk-prev" aria-label="이전 지수" hidden><i data-lucide="chevron-left"></i></button>
+    <div class="tk-list" id="tk-list"><div class="tk-empty">시장 데이터를 불러오는 중…</div></div>
+    <button class="tk-nav next" id="tk-next" aria-label="다음 지수" hidden><i data-lucide="chevron-right"></i></button>
+  </div>
+  <div class="tk-meta" id="tk-meta" data-mode="loading"><span class="led"></span>불러오는 중…</div>
+</section>
 
 <div class="scrim" id="scrim"></div>
 
@@ -36,6 +52,23 @@
         <button data-tab="watch" class="on">관심종목</button>
         <button data-tab="all">시가총액 상위</button>
       </div>
+      <div class="scr-bar">
+        <label class="scr-tog"><input type="checkbox" id="scr-on"><span class="sw" aria-hidden="true"></span>추천 종목만 보기</label>
+        <button class="scr-btn" id="scr-btn" aria-expanded="false" aria-controls="scr-panel" title="추천 조건"><i data-lucide="sliders-horizontal"></i><span id="scr-sum">종합 · 매수↑</span></button>
+      </div>
+      <div class="scr-panel" id="scr-panel" hidden>
+        <div class="scr-grp"><span>등급</span>
+          <div class="seg2" id="scr-grade" role="group" aria-label="추천 등급">
+            <button data-v="sbuy">강력 매수만</button><button data-v="buy">매수 이상 전체</button>
+          </div>
+        </div>
+        <div class="scr-grp"><span>분석 기준</span>
+          <div class="seg2" id="scr-basis" role="group" aria-label="분석 기준">
+            <button data-v="tech">기술적</button><button data-v="fund">재무 가치</button><button data-v="combo">종합</button>
+          </div>
+        </div>
+        <p class="scr-help">종합 = 기술 50% + 재무 50% · 80점↑ 강력 매수 · 65점↑ 매수</p>
+      </div>
       <div class="mkt" id="mkt" hidden>
         <button data-mkt="ALL" class="on">전체</button>
         <button data-mkt="KOSPI">코스피</button>
@@ -51,15 +84,52 @@
         <div class="av"><i data-lucide="user-round"></i></div>
         <div>
           <b>내 대시보드</b>
-          <span id="acct-state">모의 데이터 모드</span>
+          <span id="acct-state">공공데이터 종가 모드</span>
         </div>
       </div>
       <div class="kv"><span>관심종목</span><b id="acct-count">0 종목</b></div>
-      <div class="kv"><span>데이터 소스</span><b id="acct-source">Mock Feed</b></div>
+      <div class="kv"><span>데이터 소스</span><b id="acct-source">공공데이터포털 · 금융위원회</b></div>
       <div class="kv"><span>최근 수신</span><b id="acct-latency">—</b></div>
-      <button class="btn" id="connect-btn"><i data-lucide="plug-zap"></i>토스증권 API 연결</button>
+      <button class="btn" id="connect-btn"><i data-lucide="plug-zap"></i>토스증권 실시간 연결</button>
     </div>
   </aside>
+
+  <!-- ==================== 홈 대시보드 ==================== -->
+  <section class="home" id="home" aria-label="홈 대시보드">
+    <header class="h-hero">
+      <div class="h-hd"><h1>오늘의 시장</h1><span id="h-date"></span></div>
+      <p class="h-brief" id="h-brief">시장 데이터를 불러오는 중…</p>
+    </header>
+    <div class="h-grid">
+      <div class="h-main">
+        <section class="card mi-card">
+          <div class="card-hd"><i data-lucide="coins"></i><h2>환율 · 원자재 · 금리</h2><span class="sub">누르면 추세 차트</span></div>
+          <div class="mi" id="mi"><div class="loading">불러오는 중…</div></div>
+        </section>
+        <div class="h-duo">
+          <section class="card fg-card" id="fg-us"></section>
+          <section class="card fg-card" id="fg-kr"></section>
+        </div>
+      </div>
+      <aside class="h-side">
+        <section class="card dd-card">
+          <div class="card-hd"><i data-lucide="calendar-clock"></i><h2>다가오는 주요 매크로 일정</h2><span class="sub">한국시간</span></div>
+          <div class="dd-next" id="dd-next"></div>
+          <div class="chips" id="dd-filter" role="group" aria-label="일정 분류">
+            <button data-cat="" class="on">전체</button>
+            <button data-cat="macro">경제지표 · 금리</button>
+            <button data-cat="earn">기업 실적</button>
+          </div>
+          <div class="dd-list" id="dd-list"></div>
+          <button class="more" id="dd-more" hidden>일정 더 보기</button>
+          <div class="dd-foot">
+            <p>예상치: ForexFactory 이번 주 컨센서스 · 직전치: BLS · 연준 · 한국은행 공식 발표 · EPS: Nasdaq 컨센서스</p>
+            <button class="dd-all" id="dd-all">전체 일정 · 증시 뉴스 <i data-lucide="arrow-right"></i></button>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </section>
 
   <!-- ==================== 메인 ==================== -->
   <main class="main">
@@ -89,7 +159,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card chart-card" id="chart-card">
       <div class="toolbar">
         <div class="seg" id="tf-seg">
           <button data-tf="1m">1분</button>
@@ -107,14 +177,22 @@
           <button data-ind="tgt" class="on" style="color:#F04438"><span class="sw"></span>목표·손절</button>
           <button data-ind="sig" class="on" style="color:#12B76A"><span class="sw"></span>신호</button>
         </div>
-        <span class="hint-inline">⌘/Ctrl + 휠 확대 · 드래그 이동</span>
+        <div class="cx" id="chart-ctl">
+          <span class="hint-inline" id="zoom-hint">⌘/Ctrl + 휠 · 핀치 확대 · 축 드래그 배율</span>
+          <div class="cx-grp" role="group" aria-label="차트 확대 · 축소">
+            <button class="cx-btn" data-z="out" aria-label="축소" title="축소 (−)"><i data-lucide="minus"></i></button>
+            <button class="cx-btn cx-lvl" data-z="reset" aria-label="기본 보기" title="기본 보기로 (0)"><span id="zoom-lvl">—</span></button>
+            <button class="cx-btn" data-z="in" aria-label="확대" title="확대 (+)"><i data-lucide="plus"></i></button>
+          </div>
+          <button class="cx-btn cx-fs" id="fs-btn" aria-label="차트 전체화면" title="전체화면 (F)"><i data-lucide="maximize"></i><span>전체화면</span></button>
+        </div>
       </div>
       <div class="chart-legend" id="legend"></div>
       <div class="no-data" id="no-data" hidden>
         <i data-lucide="database-zap"></i>
         <b>시세 데이터가 아직 수집되지 않은 종목입니다</b>
-        <p>종목 마스터에는 포함돼 있지만 가격 데이터가 없어 차트를 그리지 않습니다.<br>
-           실시간 API(한국투자 KIS · 토스증권)를 연결하면 이 종목도 바로 표시됩니다.</p>
+        <p>종목 마스터에는 포함돼 있지만 공공데이터포털(금융위원회) 시세에도, 수집 데이터에도 없어 차트를 그리지 않습니다.<br>
+           토스증권 실시간 API 를 연결하면 이 종목도 바로 표시됩니다.</p>
       </div>
       <div class="chart-stack">
         <div class="pane" id="pane-price">
@@ -133,7 +211,8 @@
   <aside class="aside">
     <nav class="pane-tabs card" id="side-tabs">
       <button data-panel="analysis" class="on"><i data-lucide="brain-circuit"></i>AI 분석</button>
-      <button data-panel="macro"><i data-lucide="globe"></i>글로벌 매크로</button>
+      <button data-panel="value"><i data-lucide="gem"></i>가치분석</button>
+      <button data-panel="macro"><i data-lucide="globe"></i><span class="pt-l">글로벌 매크로</span><span class="pt-s">매크로</span></button>
     </nav>
 
     <div id="panel-analysis" class="panel-group">
@@ -172,6 +251,7 @@
         </div>
         <div class="cats" id="cats"></div>
       </div>
+      <button type="button" class="combo-strip" id="combo-strip" hidden></button>
     </section>
 
     <section class="card tgt-card">
@@ -206,6 +286,8 @@
     </section>
 
     </div>
+
+    <div id="panel-value" class="panel-group" hidden aria-label="가치분석 (펀더멘털)"></div>
 
     <div id="panel-macro" class="panel-group" hidden>
       <section class="card mc-hero" id="mc-hero" aria-live="polite"></section>
@@ -247,11 +329,28 @@
   </aside>
 </div>
 
+<!-- ==================== 지표 추세 팝업 ==================== -->
+<div class="modal pop" id="pop" role="dialog" aria-modal="true" aria-labelledby="pop-title">
+  <div class="box pop-box">
+    <div class="pop-hd">
+      <div><h3 id="pop-title">—</h3><span class="pop-sub" id="pop-sub"></span></div>
+      <button class="icon-btn" id="pop-close" aria-label="닫기"><i data-lucide="x"></i></button>
+    </div>
+    <div class="pop-px" id="pop-px"></div>
+    <div class="seg pop-range" id="pop-range" role="group" aria-label="기간"></div>
+    <div class="pop-err" id="pop-err" hidden></div>
+    <div class="pop-chart" id="pop-chart"></div>
+    <div class="pop-stats" id="pop-stats"></div>
+    <p class="pop-desc" id="pop-desc"></p>
+  </div>
+</div>
+
 <!-- ==================== API 연결 모달 ==================== -->
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="box">
     <h3 id="modal-title">실시간 시세 연결</h3>
-    <p class="lead">토스증권 Open API 또는 한국투자증권 KIS 실시간 시세에 연결합니다. 연결 전이거나 실패하면 모의 시세 생성기로 자동 전환됩니다.</p>
+    <p class="lead">차트와 분석은 <b>공공데이터포털 금융위원회_주식시세정보</b>(전 영업일 종가, 매일 오후 1시 이후 갱신)로 이루어집니다.
+      토스증권 Open API 를 연결하면 그 위에 <b>실시간 주가</b>와 오늘 봉 · 1분봉이 더해집니다. 연결에 실패하면 공공데이터 종가로 돌아갑니다.</p>
     <div class="warn">
       <i data-lucide="shield-alert"></i>
       <span>브라우저에 저장한 토큰은 이 페이지를 여는 누구나 볼 수 있습니다. 실제 운영에서는 <b>프록시 주소</b>만 입력하고 토큰은 서버에 두세요.</span>
@@ -259,9 +358,10 @@
     <div class="field">
       <label for="f-provider">데이터 소스</label>
       <select id="f-provider">
-        <option value="mock">모의 시세 (Random Walk)</option>
+        <option value="static">공공데이터 종가 (실시간 없음)</option>
+        <option value="toss">토스증권 Open API — 실시간 주가</option>
         <option value="kis">한국투자증권 KIS (WebSocket 체결가)</option>
-        <option value="toss">토스증권 Open API</option>
+        <option value="mock">모의 시세 (데모 · 실제 시세 아님)</option>
       </select>
     </div>
     <div class="warn" id="link-note" hidden>
@@ -274,7 +374,7 @@
         내 서버에 프록시를 설치한 뒤 그 <b>https:// 주소와 접속 키</b>를 입력하세요.
         <a href="toss-guide.html" target="_blank" rel="noopener">설정 방법 보기 →</a></span>
     </div>
-    <div class="field">
+    <div class="field" id="fld-proxy">
       <label for="f-proxy">프록시 주소 (권장)</label>
       <input id="f-proxy" type="text" placeholder="https://my-server.com/toss" autocomplete="off">
       <div class="hint">서버가 토큰을 보관하고 시세만 중계하는 방식입니다. 입력하면 토큰 필드는 사용하지 않습니다.</div>
@@ -284,7 +384,7 @@
       <input id="f-token" type="password" placeholder="KIS approval_key" autocomplete="off">
       <div class="hint">이 브라우저에만 저장됩니다(localStorage). 공유 PC에서는 사용하지 마세요.</div>
     </div>
-    <div class="field">
+    <div class="field" id="fld-ws">
       <label for="f-ws">실시간 WebSocket 주소 (선택)</label>
       <input id="f-ws" type="text" placeholder="wss://... (미입력 시 REST 1초 폴링)" autocomplete="off">
       <div class="hint">KIS 실시간은 ws://ops.koreainvestment.com:21000 이지만, HTTPS 페이지에서는 wss:// 프록시가 필요합니다.</div>
@@ -318,21 +418,27 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20260929d"></script>
-<script src="assets/core/search.js?v=20260929d"></script>
-<script src="assets/core/events.js?v=20260929d"></script>
-<script src="assets/core/market-data.js?v=20260929d"></script>
-<script src="assets/core/indicators.js?v=20260929d"></script>
-<script src="assets/core/scoring.js?v=20260929d"></script>
-<script src="assets/core/patterns.js?v=20260929d"></script>
-<script src="assets/core/targets.js?v=20260929d"></script>
-<script src="assets/core/analysis.js?v=20260929d"></script>
-<script src="assets/core/backtest.js?v=20260929d"></script>
-<script src="assets/core/news.js?v=20260929d"></script>
-<script src="assets/feed/mock.js?v=20260929d"></script>
-<script src="assets/feed/kis.js?v=20260929d"></script>
-<script src="assets/feed/toss.js?v=20260929d"></script>
-<script src="assets/feed/index.js?v=20260929d"></script>
-<script src="assets/app.js?v=20260929d"></script>
+<script src="assets/core/fx.js?v=20260929k"></script>
+<script src="assets/core/search.js?v=20260929k"></script>
+<script src="assets/core/events.js?v=20260929k"></script>
+<script src="assets/core/markets.js?v=20260929k"></script>
+<script src="assets/core/market-data.js?v=20260929k"></script>
+<script src="assets/core/indicators.js?v=20260929k"></script>
+<script src="assets/core/scoring.js?v=20260929k"></script>
+<script src="assets/core/patterns.js?v=20260929k"></script>
+<script src="assets/core/targets.js?v=20260929k"></script>
+<script src="assets/core/analysis.js?v=20260929k"></script>
+<script src="assets/core/backtest.js?v=20260929k"></script>
+<script src="assets/core/fundamentals.js?v=20260929k"></script>
+<script src="assets/core/signal.js?v=20260929k"></script>
+<script src="assets/core/news.js?v=20260929k"></script>
+<script src="assets/feed/mock.js?v=20260929k"></script>
+<script src="assets/feed/kis.js?v=20260929k"></script>
+<script src="assets/feed/toss.js?v=20260929k"></script>
+<script src="assets/feed/index.js?v=20260929k"></script>
+<script src="assets/home.js?v=20260929k"></script>
+<script src="assets/value.js?v=20260929k"></script>
+<script src="assets/screener.js?v=20260929k"></script>
+<script src="assets/app.js?v=20260929k"></script>
 </body>
 </html>
