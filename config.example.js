@@ -12,12 +12,11 @@ window.QT_CONFIG = {
     demo: false                  // true 면 모의투자 포트(31000)
   },
 
-  // 토스증권 Open API
+  // 토스증권 Open API — 브라우저에서 직접 호출할 수 없어 로컬 프록시(tools/toss_proxy.py)를 거칩니다.
+  // client_id / client_secret 은 여기가 아니라 .env 에 둡니다 (.env.example 참고).
   toss: {
-    token: '',
-    proxyBase: '',
-    restBase: 'https://openapi.tossinvest.com',
-    wsUrl: '',                   // 비우면 REST 1초 폴링
+    proxyBase: 'http://127.0.0.1:8778',
+    wsUrl: '',                   // 비우면 프록시 주소 + /ws (실패 시 REST 1초 폴링)
     pollMs: 1000
   },
 

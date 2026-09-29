@@ -38,6 +38,7 @@ window.QT = window.QT || {};
   const BY_CODE = {};
   const QUOTES = {};
   const REAL_BARS = {};
+  const REAL_SRC = {};                 // 실제 일봉 출처: 'bundle'(history.json) | 'toss'(토스증권 Open API)
   let META = { symbols:null, quotes:null, history:null, source:'seed' };
 
   function register(row){
@@ -178,6 +179,7 @@ window.QT = window.QT || {};
   }
   function dropDerived(code){ ['5m','1W','1M'].forEach(function (tf) { delete DERIVED[code + '|' + tf]; }); }
   function isReal(code){ return !!REAL_BARS[code]; }
+  function realSource(code){ return REAL_SRC[code] || null; }
   /* 시세가 수집된 종목인지 — 없으면 화면에서 값을 만들어내지 않습니다 */
   function hasData(code){ return !!REAL_BARS[code] || !!(QUOTES[code] && QUOTES[code].p > 0); }
 
@@ -202,6 +204,17 @@ window.QT = window.QT || {};
       }
     }
     dropDerived(code);
+  }
+
+  /* 증권사 API 에서 받은 실제 일봉으로 교체 — [{t,o,h,l,c,v}] 오래된 순 */
+  function setDaily(code, bars, source){
+    if (!BY_CODE[code] || !bars || !bars.length) return false;
+    REAL_BARS[code] = bars.map(function (b) { return [b.t, b.o, b.h, b.l, b.c, b.v]; });
+    REAL_SRC[code] = source || 'api';
+    delete DAILY[code]; delete MIN[code]; dropDerived(code);
+    const last = bars[bars.length - 1], prev = bars[bars.length - 2];
+    QUOTES[code] = { p:last.c, d: prev ? last.c - prev.c : 0, r: prev ? (last.c - prev.c) / prev.c * 100 : 0, v:last.v };
+    return true;
   }
 
   /* 목록 렌더링용 경량 시세 — 히스토리를 만들지 않고 수집된 종가만 사용 */
@@ -259,7 +272,8 @@ window.QT = window.QT || {};
       jget(dir + 'history.json').then(function (h) {
         if (!h || !h.items) return;
         Object.keys(h.items).forEach(function (k) {
-          REAL_BARS[k] = h.items[k];
+          if (REAL_SRC[k] && REAL_SRC[k] !== 'bundle') return;  // 이미 API 일봉을 받았으면 유지
+          REAL_BARS[k] = h.items[k]; REAL_SRC[k] = 'bundle';
           delete DAILY[k]; delete MIN[k]; dropDerived(k);        // 시뮬레이션 캐시 무효화
         });
         META.history = h.updated; META.real = Object.keys(REAL_BARS).length;
@@ -281,6 +295,7 @@ window.QT = window.QT || {};
     UNIVERSE:UNIVERSE, BY_CODE:BY_CODE, QUOTES:QUOTES, TICK_SIZE:tick,
     init:init, daily:daily, series:series, aggregate:aggregate,
     applyTick:applyTick, snapshot:snapshot, lightQuote:lightQuote, isReal:isReal, hasData:hasData, onLate:onLate,
+    setDaily:setDaily, realSource:realSource,
     meta: function (){ return META; }
   };
 })(window.QT);

@@ -3,6 +3,7 @@ config.local.js
 .env
 .env.*
 !.env.example
+.venv/
 .DS_Store
 
 # 프로젝트와 무관한 개인 파일

@@ -410,10 +410,11 @@
     const sector = $('#q-sector');
     sector.textContent = st.sector || (st.type === 'etf' ? 'ETF' : st.cur === 'USD' ? '미국 주식' : '국내 주식');
     const src = $('#q-src');
-    src.textContent = snap.real ? '실제 일봉' : '시뮬레이션 경로';
+    const fromToss = M.realSource(state.code) === 'toss';
+    src.textContent = fromToss ? '토스증권 일봉' : snap.real ? '실제 일봉' : '시뮬레이션 경로';
     src.dataset.kind = snap.real ? 'real' : 'sim';
-    src.title = snap.real
-      ? '네이버 금융 / Yahoo Finance 에서 수집한 실제 일봉입니다.'
+    src.title = fromToss ? '토스증권 Open API 에서 방금 받은 실제 일봉입니다.'
+      : snap.real ? '네이버 금융 / Yahoo Finance 에서 수집한 실제 일봉입니다.'
       : '최근 종가는 실제 값이며, 과거 경로는 시뮬레이션입니다.';
 
     const p = $('#q-price'), d = $('#q-delta'), fx = $('#q-fx');
@@ -973,6 +974,7 @@
       markKey = null; if (chart.ready) chart.series.candle.setMarkers([]);
       $('#tgt-updated').textContent = '—';
       if (state.panel === 'macro') renderEarnings();
+      loadRealDaily(state.code);
       return;
     }
     showNoData(false);
@@ -983,6 +985,28 @@
     renderQuote();
     renderAnalysis();
     if (state.panel === 'macro') renderEarnings();
+    loadRealDaily(state.code);
+  }
+
+  /* 증권사 API(토스)가 연결돼 있으면 선택 종목의 실제 일봉 400개로 시뮬레이션·번들 일봉을 교체 */
+  const realDaily = {};
+  function loadRealDaily(code){
+    if (realDaily[code] || !QT.Feed.canFetchCandles()) return Promise.resolve();
+    realDaily[code] = true;
+    return QT.Feed.fetchCandles(code, '1d', 400).then(function (list) {
+      if (!M.setDaily(code, list, 'toss')) return;
+      if (code === state.code) loadSymbol(false);
+      refreshRowPrices();
+    }).catch(function (e) {
+      delete realDaily[code];
+      console.warn('[QT] 일봉 조회 실패', code, e.message);
+    });
+  }
+  /* 관심종목도 전일 대비가 맞도록 한 종목씩 차례로 받는다 (차트 API 초당 20회 한도) */
+  function loadRealDailyAll(){
+    state.watchlist.reduce(function (p, code) {
+      return p.then(function () { return loadRealDaily(code); });
+    }, loadRealDaily(state.code));
   }
   function refreshLive(){
     if (!M.hasData(state.code)) return;
@@ -1113,13 +1137,21 @@
   $('#scrim').addEventListener('click', closeDrawer);
 
   /* ---------------- 연결 설정 ---------------- */
+  function fillModal(provider){
+    const c = QT.Feed.getConfig(), toss = provider === 'toss';
+    const p = provider === 'kis' ? c.kis : c.toss;
+    $('#f-proxy').value = p.proxyBase || (toss ? QT.TOSS_DEFAULT_PROXY : '');
+    $('#f-proxy').placeholder = toss ? QT.TOSS_DEFAULT_PROXY : 'https://my-server.com/kis';
+    $('#f-token').value = provider === 'kis' ? (c.kis.approvalKey || '') : '';
+    $('#f-ws').value = p.wsUrl || '';
+    $('#f-ws').placeholder = toss ? '비우면 프록시 주소 + /ws' : 'wss://... (미입력 시 REST 1초 폴링)';
+    $('#fld-token').hidden = provider !== 'kis';
+    $('#toss-guide').hidden = !toss;
+  }
   function openModal(){
     const c = QT.Feed.getConfig();
     $('#f-provider').value = c.provider;
-    const p = c.provider === 'kis' ? c.kis : c.toss;
-    $('#f-proxy').value = p.proxyBase || '';
-    $('#f-token').value = (c.provider === 'kis' ? c.kis.approvalKey : c.toss.token) || '';
-    $('#f-ws').value = p.wsUrl || '';
+    fillModal(c.provider);
     if (NEWS){
       const n = NEWS.getConfig();
       $('#f-news-mode').value = n.mode;
@@ -1128,6 +1160,7 @@
     }
     $('#modal').classList.add('show');
   }
+  $('#f-provider').addEventListener('change', function () { fillModal(this.value); });
   function closeModal(){ $('#modal').classList.remove('show'); }
   $('#settings-btn').addEventListener('click', openModal);
   $('#connect-btn').addEventListener('click', openModal);
@@ -1144,7 +1177,7 @@
     const proxy = $('#f-proxy').value.trim(), token = $('#f-token').value.trim(), ws = $('#f-ws').value.trim();
     QT.Feed.applyConfig(provider === 'kis'
       ? { provider:provider, kis:{ proxyBase:proxy, approvalKey:token, wsUrl:ws } }
-      : { provider:provider, toss:{ proxyBase:proxy, token:token, wsUrl:ws } });
+      : { provider:provider, toss:{ proxyBase:proxy, wsUrl:ws } });
     closeModal();
   });
 
@@ -1153,9 +1186,11 @@
     const codes = state.watchlist.slice();
     if (codes.indexOf(state.code) < 0) codes.push(state.code);
     QT.Feed.subscribe(codes);
+    loadRealDailyAll();
   }
   const FEED_TEXT = { live:'실시간 수신 중', mock:'모의 시세', connecting:'연결 중', error:'연결 실패' };
   QT.Feed.on('status', function (s) {
+    if (s.mode === 'live') loadRealDailyAll();
     const pill = $('#feed-pill'), tag = $('#live-tag');
     pill.dataset.mode = s.mode;
     $('#feed-text').textContent = s.mode === 'live' ? '실시간' : FEED_TEXT[s.mode] || s.mode;

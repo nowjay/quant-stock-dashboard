@@ -15,7 +15,7 @@ window.QT = window.QT || {};
   const DEFAULTS = {
     provider: 'mock',                                   // mock | kis | toss
     kis:  { approvalKey:'', proxyBase:'', wsUrl:'', demo:false },
-    toss: { token:'', proxyBase:'', restBase:'https://openapi.tossinvest.com', wsUrl:'', pollMs:1000 }
+    toss: { proxyBase:'http://127.0.0.1:8778', wsUrl:'', pollMs:1000 }   // tools/toss_proxy.py
   };
 
   function readConfig(){
@@ -94,6 +94,7 @@ window.QT = window.QT || {};
     this._watchdog = setInterval(function () {
       if (self.status.mode !== 'live' || document.hidden) return;
       if (Date.now() - self.lastTickAt < STALE_MS) return;
+      if (impl.healthy && impl.healthy()) return;          // 장외 시간처럼 체결만 없는 경우
       self._setStatus({ mode:'connecting', source:impl.name, reason:'수신 지연 감지 — 재연결 중' });
       try { impl.disconnect(); } catch (e) {}
       impl.connect().catch(function (e) { self._useMock(self._reason(e) + ' — 모의 시세로 대체'); });
@@ -110,6 +111,15 @@ window.QT = window.QT || {};
     if (/Failed to fetch|NetworkError|CORS/i.test(m)) return '브라우저에서 증권사 API 직접 호출은 CORS 로 차단됩니다. 프록시 주소가 필요합니다';
     if (/Mixed Content|ws:\/\//i.test(m)) return 'HTTPS 페이지에서는 ws:// 연결이 차단됩니다. wss:// 프록시가 필요합니다';
     return '연결 실패 (' + m + ')';
+  };
+
+  /* 실제 과거 봉 — 증권사 API 가 연결돼 있을 때만 (토스: 1d · 1m) */
+  MarketFeed.prototype.canFetchCandles = function (){
+    return this.status.mode === 'live' && !!this.impl && typeof this.impl.fetchCandles === 'function';
+  };
+  MarketFeed.prototype.fetchCandles = function (code, interval, count){
+    if (!this.canFetchCandles()) return Promise.reject(new Error('실시간 연결 없음'));
+    return this.impl.fetchCandles(code, interval, count);
   };
 
   MarketFeed.prototype.subscribe = function (codes){

@@ -21,6 +21,7 @@ python3 -m http.server 8777    # 프로젝트 폴더에서 실행 후 http://loc
 | 대표 종목 일봉 | 네이버 금융 / Yahoo Finance | **실제** (2년치) |
 | 그 외 종목의 과거 경로 | 시뮬레이션 | 최근 종가는 실제, **경로만 생성** → 화면에 `시뮬레이션 경로` 배지 |
 | 분봉(1·5분) | 일봉에서 파생 | 시뮬레이션 (실시간 API 연결 시 실제 체결로 대체) |
+| 토스증권 연결 시 현재가 · 실시간 체결 · 일봉 | 토스증권 Open API (로컬 프록시 경유) | **실제** — 선택 종목·관심종목의 일봉 400개를 받아 번들/시뮬레이션 일봉을 대체, `토스증권 일봉` 배지 |
 | USD/KRW 환율 | frankfurter.dev → open.er-api.com | **실제**, 10분마다 갱신 |
 | FOMC 일정 | federalreserve.gov | **실제 확정** |
 | 미국 CPI · PPI · 고용보고서 | bls.gov 발표 캘린더 (수집 시) / 발표 패턴 규칙 | `확정` / `예상` |
@@ -49,14 +50,54 @@ python3 tools/build_news.py         # 증시 뉴스 스냅샷 (실시간 피드 
 연결 우선순위는 **WebSocket → REST 1초 폴링 → 모의 시세**입니다.
 
 - `assets/feed/kis.js` — 한국투자증권 KIS 실시간 체결가(`H0STCNT0`) 파서, PINGPONG 응답, 지수 백오프 재연결(최대 5회)
-- `assets/feed/toss.js` — 토스증권 Open API (WebSocket 또는 REST 폴링)
+- `assets/feed/toss.js` — 토스증권 Open API (로컬 프록시 경유 WebSocket 체결, 끊기면 REST 1초 폴링으로 메움)
 - `assets/feed/mock.js` — 랜덤워크 모의 시세 (연동 전/실패 시 자동 전환)
 - `assets/feed/index.js` — 위 셋을 고르고 폴백하는 파사드. 15초간 체결이 없으면 워치독이 재연결
 
 차트 우상단에 **`🟢 실시간 수신 중 · 14:03:21`** 배지로 상태와 마지막 수신 시각을 표시합니다.
 
 > ⚠️ 브라우저에서 증권사 API를 직접 호출하면 CORS로 차단되고, HTTPS 페이지에서는 `ws://`도 차단됩니다.
-> 실거래 연동에는 토큰을 보관하고 `wss://`로 중계하는 **프록시 서버가 필요**합니다.
+> 실거래 연동에는 토큰을 보관하고 `wss://`로 중계하는 **프록시 서버가 필요**합니다. 토스증권용은 `tools/toss_proxy.py`로 들어 있습니다.
+
+### 토스증권 Open API 연결
+
+토스증권 API는 브라우저에서 바로 부를 수 없습니다(REST 응답에 CORS 헤더가 없고, 웹소켓 handshake에
+`Authorization` 헤더가 필요하며, `client_secret`을 페이지에 둘 수 없음). 그래서 이 PC에서만 도는
+**로컬 프록시**가 토큰을 발급·보관하고 시세만 중계합니다.
+
+```
+브라우저 ── http://127.0.0.1:8778/api/v1/... ──▶ toss_proxy.py ──▶ https://openapi.tossinvest.com
+브라우저 ── ws://127.0.0.1:8778/ws ────────────▶ toss_proxy.py ──▶ wss://openapi-ws.tossinvest.com/ws/v1
+```
+
+1. **키 발급** — 토스증권 WTS 로그인 → 설정 → Open API에서 `client_id` · `client_secret` 발급
+2. **허용 IP 등록** — 같은 화면 하단 *허용 IP 관리*에 이 PC의 공인 IP 등록 (미등록 IP는 `403`).
+   집 인터넷은 공인 IP가 바뀔 수 있으니 403이 나면 먼저 확인하세요.
+3. **`.env` 작성** — `cp .env.example .env` 후 `TOSS_CLIENT_ID` · `TOSS_CLIENT_SECRET` 입력 (`.env`는 gitignore)
+4. **프록시 실행**
+   ```bash
+   python3 -m venv .venv && .venv/bin/pip install aiohttp certifi   # 처음 한 번
+   .venv/bin/python tools/toss_proxy.py
+   ```
+   `연결 확인 완료 — 삼성전자(005930) 현재가 …원`이 보이면 키와 허용 IP가 모두 정상입니다.
+5. **대시보드 연결** — 우상단 톱니 → 데이터 소스 `토스증권 Open API` → 프록시 주소 `http://127.0.0.1:8778` → 연결하기
+
+동작
+- 연결 시 현재가를 한 번 받아 두고(웹소켓은 초기값을 주지 않음) `trade:kr` / `trade:us` 체결을 구독합니다.
+- 선택 종목과 관심종목의 실제 일봉 400개를 받아 차트·지표·전일 대비를 계산합니다.
+- 프록시↔토스 웹소켓이 끊기면 그동안 REST 1초 폴링으로 메우고, 다시 붙으면 실시간으로 돌아갑니다.
+- 체결이 없는 장외 시간에도 연결이 살아 있으면 재연결하지 않습니다(PING/pong으로 확인).
+- 프록시 상태 확인: `curl http://127.0.0.1:8778/health`
+
+프록시 안전장치
+- `127.0.0.1`에만 바인딩하고, localhost 페이지의 요청·웹소켓만 받습니다(다른 사이트가 몰래 붙지 못함).
+  배포본(`https://nowjay.github.io`)에서 쓰려면 `.env`에 `TOSS_ALLOWED_ORIGINS`를 추가하세요(브라우저에 따라 HTTPS→localhost 호출이 막힐 수 있음).
+- **주문·계좌·조건주문 API는 중계하지 않습니다** — 시세·종목·시장 정보 GET만 통과합니다.
+- 토큰은 클라이언트당 1개만 유효합니다. 프록시가 새로 발급하면 다른 스크립트에서 쓰던 토큰은 `token-revoked`가 됩니다.
+- 토스 웹소켓은 계정당 동시 2개까지라, 탭을 여러 개 열어도 프록시가 업스트림 1개를 공유합니다.
+
+> 토스증권 데이터 이용 정책상 API로 받은 정보는 **본인 매매 목적**으로만 쓸 수 있고 제3자 배포가 금지됩니다.
+> 토스 데이터는 브라우저에서 실시간으로만 받고 `assets/data/`나 배포본에 저장하지 않습니다.
 
 ### 3. 글로벌 매크로 뉴스 & 주요 일정
 우측 패널 `글로벌 매크로` 탭은 개별 종목이 아니라 **증시 전체에 영향을 주는 일정과 뉴스**를 모아 보여 줍니다.
@@ -128,6 +169,7 @@ assets/core/events.js          매크로 일정 · 실적 시즌 캘린더 (확�
 assets/core/news.js            증시 뉴스 피드 (RSS 중계 · 스냅샷 · 카테고리 분류)
 assets/core/fx.js              USD/KRW 환율
 assets/feed/{kis,toss,mock,index}.js   실시간 피드 어댑터와 파사드
+tools/toss_proxy.py            토스증권 Open API 로컬 프록시 (토큰 보관 · REST/웹소켓 중계)
 assets/data/*.json             수집된 종목·시세·일봉·일정 데이터
 tools/build_*.py               데이터 수집 스크립트
 legacy/terminal-dark.html      초기 다크 터미널 버전
@@ -135,8 +177,9 @@ legacy/terminal-dark.html      초기 다크 터미널 버전
 
 ## 설정
 
-우상단 톱니 → **실시간 시세 연결**에서 데이터 소스(모의 / KIS / 토스), 프록시 주소, 토큰, WebSocket 주소와
+우상단 톱니 → **실시간 시세 연결**에서 데이터 소스(모의 / KIS / 토스), 프록시 주소, WebSocket 주소와
 뉴스 피드 수신 방식을 설정합니다(브라우저 localStorage 저장). 로컬 개발에서는 `config.local.js`(gitignore)로도 지정할 수 있습니다.
+토스증권 키는 브라우저가 아니라 `.env`에 둡니다.
 
 ## 면책
 
