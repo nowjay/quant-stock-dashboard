@@ -1,0 +1,86 @@
+# GitHub Pages 배포
+#   공공데이터포털 '금융위원회_주식시세정보'로 국내 전 종목 일봉(assets/data/krx/)을 만들어 사이트와 함께 올립니다.
+#   · 종목별 일봉 파일은 커밋하지 않습니다 — 매일 수천 개 파일을 다시 쓰면 저장소가 계속 불어나기 때문.
+#     받은 날짜별 원본은 actions/cache(.cache/krx)에 보관해 다음 배포 때 새 날짜만 받습니다.
+#   · 서비스키: 저장소 Settings → Secrets → Actions 의 DATA_GO_KR_KEY (없으면 번들 데이터만으로 배포)
+#   · Pages 소스가 'GitHub Actions' 여야 합니다 (Settings → Pages → Build and deployment → Source).
+#   · 실행 시점: main 푸시 · build-data 수집 직후 · 평일 공공데이터 게시(전 영업일 시세, 오후 1시 이후) 뒤 · 수동
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [build-data]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '40 4 * * 1-5'          # 13:40 KST
+    - cron: '30 8 * * 1-5'          # 17:30 KST (게시가 늦은 날 대비)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # build-data 가 방금 커밋한 데이터까지 포함하도록 항상 main 최신으로
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 공공데이터 캐시 복원
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/krx
+          key: krx-${{ github.run_id }}
+          restore-keys: krx-
+
+      - name: 공공데이터 일봉 생성
+        id: krx
+        env:
+          TZ: Asia/Seoul
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+        # 새로 받은 날짜가 있으면 changed=true 를 남긴다 → 그때만 캐시 저장
+        run: python3 tools/build_krx.py || echo "::warning::공공데이터 일봉 생성 실패 — 번들 데이터로 배포합니다"
+
+      - name: 공공데이터 캐시 저장
+        if: steps.krx.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/krx
+          key: krx-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: 사이트 묶기
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '.cache' --exclude '_site' ./ _site/
+          du -sh _site _site/assets/data 2>/dev/null
+          ls _site/assets/data/krx/d 2>/dev/null | wc -l | xargs echo "공공데이터 일봉 파일:"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

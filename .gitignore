@@ -10,3 +10,7 @@ config.local.js
 무제.rtf
 __pycache__/
 *.pyc
+
+# 공공데이터 일봉 — 배포 워크플로(pages.yml)가 매번 생성 (커밋하지 않음)
+assets/data/krx/
+.cache/

@@ -50,10 +50,11 @@
   function hhmmss(t){ const d = new Date(t); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
 
   /* ---------------- 상태 ---------------- */
-  const WL_KEY = 'qt.watchlist.v2';
+  const WL_KEY = 'qt.watchlist.v2', VIEW_KEY = 'qt.view.v1';
   const DEFAULT_WL = ['005930','000660','373220','035420','005380','196170','NVDA','AAPL'];
   const state = {
     code: '005930', tf:'1D', tab:'watch', mkt:'ALL', q:'', panel:'analysis',
+    view: (function () { try { return localStorage.getItem(VIEW_KEY) === 'stock' ? 'stock' : 'home'; } catch (e) { return 'home'; } })(),
     mcCat:'', mcMore:false, earnMore:false, newsCat:'',
     watchlist: (function () {
       try { const s = JSON.parse(localStorage.getItem(WL_KEY)); if (Array.isArray(s) && s.length) return s; } catch (e) {}
@@ -75,14 +76,16 @@
     return {
       height:h, layout:Object.assign({}, LAYOUT),
       grid:{ vertLines:{ color:COLORS.grid }, horzLines:{ color:COLORS.grid } },
-      rightPriceScale:{ borderVisible:false, scaleMargins:{ top:0.12, bottom:0.06 } },
+      rightPriceScale:{ borderVisible:false, minimumWidth:76, scaleMargins:{ top:0.12, bottom:0.06 } },
       timeScale:{ borderVisible:false, timeVisible:true, secondsVisible:false, rightOffset:3, minBarSpacing:1.5 },
       crosshair:{
         mode: LWC ? LWC.CrosshairMode.Normal : 0,
         vertLine:{ color:'#B0B8C1', width:1, style:2, labelBackgroundColor:'#191F28' },
         horzLine:{ color:'#B0B8C1', width:1, style:2, labelBackgroundColor:'#191F28' }
       },
-      handleScale:{ axisPressedMouseMove:{ time:true, price:false } },
+      /* 휠 확대는 직접 처리(onWheel) — 평소엔 페이지 스크롤을 막지 않고, ⌘/Ctrl·핀치·전체화면에서만 확대 */
+      handleScroll:{ mouseWheel:false, pressedMouseMove:true, horzTouchDrag:true, vertTouchDrag:false },
+      handleScale:{ mouseWheel:false, pinch:true, axisPressedMouseMove:{ time:true, price:true }, axisDoubleClickReset:{ time:true, price:true } },
       localization:{ locale:'ko-KR' }
     };
   }
@@ -94,18 +97,19 @@
 
   function buildCharts(){
     if (!LWC){
+      chart.failed = true;
       $('.chart-stack').innerHTML = '<div class="lib-fallback">차트 라이브러리를 불러오지 못했습니다.<br>네트워크 확인 후 새로고침해 주세요.</div>';
       return;
     }
     chart.price = LWC.createChart($('#pane-price'), baseOptions($('#pane-price').clientHeight));
     chart.rsi = LWC.createChart($('#pane-rsi'), Object.assign(baseOptions($('#pane-rsi').clientHeight), {
       layout: Object.assign({}, LAYOUT, { attributionLogo:false }),
-      rightPriceScale:{ borderVisible:false, scaleMargins:{ top:0.08, bottom:0.08 } },
+      rightPriceScale:{ borderVisible:false, minimumWidth:76, scaleMargins:{ top:0.08, bottom:0.08 } },
       timeScale:{ visible:false, borderVisible:false }
     }));
     chart.macd = LWC.createChart($('#pane-macd'), Object.assign(baseOptions($('#pane-macd').clientHeight), {
       layout: Object.assign({}, LAYOUT, { attributionLogo:false }),
-      rightPriceScale:{ borderVisible:false, scaleMargins:{ top:0.18, bottom:0.18 } }
+      rightPriceScale:{ borderVisible:false, minimumWidth:76, scaleMargins:{ top:0.18, bottom:0.18 } }
     }));
 
     chart.series.candle = chart.price.addCandlestickSeries({
@@ -163,19 +167,113 @@
     chart.ready = true;
 
     ['price','rsi','macd'].forEach(function (k) {
-      $('#pane-' + k).addEventListener('wheel', function (e) {
-        if (e.ctrlKey || e.metaKey){ e.preventDefault(); return; }
-        e.stopPropagation();
-      }, { capture:true, passive:false });
+      $('#pane-' + k).addEventListener('wheel', onWheel, { passive:false });
     });
-    const ro = new ResizeObserver(function () {
-      if (!chart.ready) return;
-      ['price','rsi','macd'].forEach(function (k) {
-        const el = $('#pane-' + k);
-        if (el && chart[k]) chart[k].applyOptions({ width: el.clientWidth, height: el.clientHeight });
-      });
-    });
+    chart.price.timeScale().subscribeVisibleLogicalRangeChange(zoomLabel);
+    const ro = new ResizeObserver(resizeCharts);
     ['price','rsi','macd'].forEach(function (k) { ro.observe($('#pane-' + k)); });
+  }
+  function resizeCharts(){
+    if (!chart.ready) return;
+    ['price','rsi','macd'].forEach(function (k) {
+      const el = $('#pane-' + k);
+      if (el && chart[k] && el.clientWidth) chart[k].applyOptions({ width: el.clientWidth, height: el.clientHeight });
+    });
+  }
+
+  /* ---------------- 차트 확대 · 축소 · 전체화면 ---------------- */
+  const SPAN = { '1m':180, '5m':160, '1D':140, '1W':120, '1M':84 };
+  const MIN_BARS = 12;
+  let pendingReset = false, pendingRange = null, rangeSeq = 0;
+  /* 기본 보기: 시간대별 기본 봉 수 + 가격축 자동 맞춤 */
+  function defaultRange(){
+    if (!chart.ready || !bars.length) return;
+    if (state.view !== 'stock'){ pendingReset = true; return; }   // 숨겨진 차트는 폭이 0이라 보일 때 다시 맞춘다
+    const span = SPAN[state.tf] || 140;
+    const to = bars.length + 2, from = Math.max(0, bars.length - span);
+    pendingRange = null; rangeSeq++;
+    syncing = true;
+    [chart.price, chart.rsi, chart.macd].forEach(function (c) {
+      c.timeScale().setVisibleLogicalRange({ from:from, to:to });
+      c.priceScale('right').applyOptions({ autoScale:true });
+    });
+    syncing = false;
+    zoomLabel();
+  }
+  /* 차트는 보이는 범위를 다음 프레임에 반영하므로, 한 프레임에 휠 · 핀치 이벤트가 여러 번 오면
+     직전에 요청한 범위를 기준으로 이어서 계산해야 확대가 끊기지 않는다 */
+  function currentRange(){ return pendingRange || (chart.ready && chart.price.timeScale().getVisibleLogicalRange()); }
+  function applyRange(from, to){
+    const id = ++rangeSeq;
+    pendingRange = { from:from, to:to };
+    chart.price.timeScale().setVisibleLogicalRange(pendingRange);
+    requestAnimationFrame(function () { requestAnimationFrame(function () { if (id === rangeSeq) pendingRange = null; }); });
+  }
+  function plotWidth(){ return Math.max(1, $('#pane-price').clientWidth - chart.price.priceScale('right').width()); }
+  /* factor < 1 확대, > 1 축소. anchorX(px)가 있으면 그 지점을 고정, 없으면 최신 봉(오른쪽 끝) 기준 */
+  function zoomBy(factor, anchorX){
+    if (!chart.ready || !bars.length) return;
+    const r = currentRange();
+    if (!r) return;
+    const span = r.to - r.from;
+    const next = Math.max(MIN_BARS, Math.min(bars.length + 40, span * factor));
+    if (Math.abs(next - span) < 0.01) return;
+    const anchor = anchorX != null ? r.from + Math.max(0, Math.min(1, anchorX / plotWidth())) * span
+      : r.to >= bars.length - 1 ? r.to : (r.from + r.to) / 2;
+    const from = anchor - (anchor - r.from) / span * next;
+    applyRange(from, from + next);
+  }
+  function panBy(px){
+    if (!chart.ready) return;
+    const r = currentRange();
+    if (!r) return;
+    const d = (r.to - r.from) * px / plotWidth();
+    applyRange(r.from + d, r.to + d);
+  }
+  function onWheel(e){
+    if (!chart.ready) return;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    /* ⌘/Ctrl + 휠, 트랙패드 핀치(ctrlKey), 전체화면의 휠 → 커서 위치 기준 확대 · 축소 */
+    if (e.ctrlKey || e.metaKey || (isFs() && !horizontal && !e.shiftKey)){
+      e.preventDefault();
+      const dy = Math.max(-240, Math.min(240, e.deltaY * unit));
+      zoomBy(Math.exp(dy * 0.0024), e.clientX - e.currentTarget.getBoundingClientRect().left);
+      return;
+    }
+    /* 트랙패드 좌우 스와이프 · Shift + 휠 → 과거/최근으로 이동. 세로 휠은 페이지 스크롤 */
+    if (horizontal || e.shiftKey){
+      e.preventDefault();
+      panBy((horizontal ? e.deltaX : e.deltaY) * unit);
+    }
+  }
+  function zoomLabel(){
+    const r = chart.ready && chart.price.timeScale().getVisibleLogicalRange();
+    const el = $('#zoom-lvl');
+    if (!el || !r || !bars.length) return;
+    const n = Math.max(0, Math.min(bars.length - 1, Math.floor(r.to)) - Math.max(0, Math.ceil(r.from)) + 1);
+    el.textContent = n + '봉';
+  }
+  function isFs(){ return $('#chart-card').classList.contains('fs'); }
+  function setFs(on){
+    const card = $('#chart-card');
+    if (on === isFs() || (on && !chart.ready)) return;
+    card.classList.toggle('fs', on);
+    document.body.classList.toggle('fs-lock', on);
+    if (on){
+      /* 브라우저 전체화면 — 지원하지 않으면(아이폰 사파리 등) 화면을 가득 채우는 모드로만 동작 */
+      if (card.requestFullscreen && !document.fullscreenElement) card.requestFullscreen().catch(function () {});
+    } else if (document.fullscreenElement){
+      document.exitFullscreen().catch(function () {});
+    }
+    const btn = $('#fs-btn');
+    btn.innerHTML = on ? '<i data-lucide="minimize"></i><span>닫기</span>' : '<i data-lucide="maximize"></i><span>전체화면</span>';
+    btn.setAttribute('aria-label', on ? '전체화면 닫기' : '차트 전체화면');
+    btn.title = on ? '전체화면 닫기 (Esc)' : '전체화면 (F)';
+    $('#zoom-hint').textContent = on ? '휠 확대 · 드래그 이동 · +/− · 0 초기화 · Esc 닫기' : '⌘/Ctrl + 휠 · 핀치 확대 · 축 드래그 배율';
+    [chart.price, chart.rsi, chart.macd].forEach(function (c) { c.applyOptions({ handleScroll:{ vertTouchDrag:on } }); });
+    icons();
+    resizeCharts();
   }
 
   function lineData(arr){
@@ -212,13 +310,7 @@
     const bottom = stack.filter(function (x) { return x.on; }).pop();
     stack.forEach(function (x) { x.c.applyOptions({ timeScale:{ visible: x === bottom, timeVisible:showTime, secondsVisible:false } }); });
 
-    if (resetView){
-      const span = { '1m':180, '5m':160, '1D':140, '1W':120, '1M':84 }[state.tf] || 140;
-      const to = bars.length + 2, from = Math.max(0, bars.length - span);
-      syncing = true;
-      [chart.price, chart.rsi, chart.macd].forEach(function (c) { c.timeScale().setVisibleLogicalRange({ from:from, to:to }); });
-      syncing = false;
-    }
+    if (resetView) defaultRange();
     $('#pane-rsi').style.display = state.ind.rsi ? '' : 'none';
     $('#pane-macd').style.display = state.ind.macd ? '' : 'none';
     tgtKey = null; markKey = null;
@@ -326,6 +418,8 @@
   function renderList(){
     const el = $('#wl');
     $('#mkt').hidden = state.tab !== 'all';
+    $('#acct-count').textContent = state.watchlist.length + ' 종목';
+    if (QT.Screener && QT.Screener.cfg.on){ QT.Screener.render(el, state.tab, state.mkt, state.watchlist); return; }
     let pool, withSpark;
     if (state.tab === 'watch'){
       pool = state.watchlist.map(function (c) { return M.BY_CODE[c]; }).filter(Boolean);
@@ -346,7 +440,6 @@
     }
     el.innerHTML = pool.map(function (s) { return rowHtml(s, withSpark); }).join('');
     icons();
-    $('#acct-count').textContent = state.watchlist.length + ' 종목';
   }
   function refreshRowPrices(){
     $$('#wl .wl-row').forEach(function (row) {
@@ -401,6 +494,23 @@
   }
 
   /* ---------------- 시세 헤더 ---------------- */
+  /* 차트 데이터 출처 배지 — 공공데이터(금융위원회) · 토스증권 · 번들 · 시뮬레이션 */
+  function sourceInfo(code, snap){
+    const kx = M.krxMeta(), rs = M.realSource(code);
+    if (state.tf === '1m' || state.tf === '5m'){
+      return M.minuteSource(code) === 'toss'
+        ? { text:'토스 실제 분봉', real:true, title:'토스증권 Open API 1분봉 + 실시간 체결입니다.' }
+        : { text:'분봉 시뮬레이션', real:false, title:'일봉에서 만든 가상의 분봉입니다. 토스증권을 연결하면 실제 1분봉으로 바뀝니다.' };
+    }
+    const asOf = kx ? kx.basDt : '';
+    if (rs === 'krx') return { text:'공공데이터 일봉', real:true,
+      title:'공공데이터포털 금융위원회_주식시세정보 (' + asOf + ' 기준 · 수정주가). 전 영업일 시세가 다음 날 오후 1시 이후 갱신됩니다.' };
+    if (rs === 'krx+toss') return { text:'공공데이터 + 토스 실시간', real:true,
+      title:'과거 일봉은 공공데이터포털 금융위원회_주식시세정보(' + asOf + '까지), 그 이후 거래일과 실시간 체결은 토스증권 Open API 입니다.' };
+    if (rs === 'toss') return { text:'토스증권 일봉', real:true, title:'토스증권 Open API 에서 방금 받은 실제 일봉입니다.' };
+    if (snap && snap.real) return { text:'실제 일봉', real:true, title:'네이버 금융 / Yahoo Finance 에서 수집한 실제 일봉입니다.' };
+    return { text:'시뮬레이션 경로', real:false, title:'최근 종가는 실제 값이며, 과거 경로는 시뮬레이션입니다.' };
+  }
   function renderQuote(){
     const st = M.BY_CODE[state.code], snap = M.snapshot(state.code);
     if (!snap) return;
@@ -409,13 +519,11 @@
     $('#q-market').textContent = st.market;
     const sector = $('#q-sector');
     sector.textContent = st.sector || (st.type === 'etf' ? 'ETF' : st.cur === 'USD' ? '미국 주식' : '국내 주식');
-    const src = $('#q-src');
-    const fromToss = M.realSource(state.code) === 'toss';
-    src.textContent = fromToss ? '토스증권 일봉' : snap.real ? '실제 일봉' : '시뮬레이션 경로';
-    src.dataset.kind = snap.real ? 'real' : 'sim';
-    src.title = fromToss ? '토스증권 Open API 에서 방금 받은 실제 일봉입니다.'
-      : snap.real ? '네이버 금융 / Yahoo Finance 에서 수집한 실제 일봉입니다.'
-      : '최근 종가는 실제 값이며, 과거 경로는 시뮬레이션입니다.';
+    const src = $('#q-src'), info = sourceInfo(state.code, snap);
+    src.textContent = info.text;
+    src.dataset.kind = info.real ? 'real' : 'sim';
+    src.title = info.title;
+    if (feedMode() === 'static') $('#live-tag-time').textContent = lastBarDay();
 
     const p = $('#q-price'), d = $('#q-delta'), fx = $('#q-fx');
     p.textContent = price(snap.price, st.cur);
@@ -455,7 +563,23 @@
     div:'다이버전스: 주가와 지표가 반대로 움직이는 현상. 추세가 힘을 잃고 있다는 경고로 자주 쓰입니다.',
     pivot:'피봇: 전날 고가·저가·종가로 계산한 오늘의 저항(R)·지지(S) 기준선입니다.',
     mtf:'시간대별 비교: 같은 종목을 일봉·주봉·월봉으로 따로 분석합니다. 세 시간대가 같은 방향이면 추세의 신뢰도가 높습니다.',
-    bt:'백테스트: 같은 계산을 이 종목의 과거 날짜마다 적용해, 비슷한 신호 뒤 실제 주가가 어떻게 움직였는지 집계한 값입니다. 과거 성과가 미래를 보장하지는 않습니다.'
+    bt:'백테스트: 같은 계산을 이 종목의 과거 날짜마다 적용해, 비슷한 신호 뒤 실제 주가가 어떻게 움직였는지 집계한 값입니다. 과거 성과가 미래를 보장하지는 않습니다.',
+    fng:'공포 & 탐욕 지수(CNN): 미국 증시의 투자 심리를 0~100으로 나타냅니다. 25 미만 극심한 공포 · 45 미만 공포 · 55 이하 중립 · 75 이하 탐욕 · 그 이상 극심한 탐욕. 극단적인 공포는 저가 매수 기회, 극단적인 탐욕은 과열 경고로 보는 역발상 지표로도 씁니다.',
+    krs:'국장 심리지수(QUANT 자체 계산): 코스피 125일선 괴리 · 52주 위치 · RSI · 20일 변동성 · 원/달러 20일 변화 · 코스닥 상대강도를 최근 1년 분포 대비 백분위(0~100)로 바꿔 평균했습니다. 단계 기준은 CNN 지수와 같습니다(25 · 45 · 55 · 75).',
+    signal:'종합 매수 신호: 기술 점수(이동평균선 방향 · RSI · MACD · 피봇 저항 돌파, 각 25점)와 재무 점수(업종 대비 PER · PBR, ROE 10% 이상, 영업이익 전년 대비 증가, 각 25점)를 반씩 합친 0~100점입니다. 80점 이상 강력 매수 · 65~79 매수 · 45~64 중립 · 30~44 매도 · 30 미만 강력 매도. 재무 건전성이 낮으면 재무 점수에서 최대 10점을 뺍니다.',
+    per:'PER(주가수익비율): 주가 ÷ 최근 4분기 주당순이익. 이익 대비 몇 배에 거래되는지를 뜻하며, 같은 업종 평균보다 낮으면 상대적으로 싸다고 봅니다.',
+    fper:'선행 PER: 주가 ÷ 증권사들이 예상한 올해(회계연도) 주당순이익. 현재 PER보다 낮으면 앞으로 이익이 늘 것으로 기대된다는 뜻입니다.',
+    pbr:'PBR(주가순자산비율): 주가 ÷ 주당순자산. 1배 미만이면 회사가 가진 순자산보다 싸게 거래되는 상태입니다. 다만 이익을 못 내는 회사는 계속 싸게 머물 수 있습니다.',
+    roe:'ROE(자기자본이익률): 순이익 ÷ 자기자본. 주주 돈으로 1년에 몇 %를 벌었는지로, 10% 이상이면 양호, 15% 이상이면 우수로 봅니다.',
+    ev:'EV/EBITDA: 기업가치(시가총액 + 순차입금) ÷ 세금·이자·감가상각 전 영업이익. 회사를 통째로 살 때 현금창출력의 몇 년치인지를 뜻하며, 낮을수록 싸다고 봅니다.',
+    dy:'배당수익률: 주당배당금 ÷ 현재가. 주식을 사서 1년간 받는 배당금 비율입니다.',
+    peg:'PEG: PER ÷ 이익 성장률(%). 1 미만이면 성장 속도에 비해 주가가 싸다고 봅니다.',
+    fcf:'FCF 수익률: 잉여현금흐름(영업현금흐름 − 설비투자) ÷ 시가총액. 회사가 실제로 남긴 현금이 주가 대비 얼마나 되는지입니다.',
+    health:'재무 건전성: 부채비율(30) · 이자보상배율(30) · 유보율(20) · 유동비율(20)을 점수화했습니다. 80점 이상 매우 안정 · 65 안정 · 45 보통 · 30 주의 · 그 아래 위험. 금융업은 부채비율 · 이자보상배율을 제외합니다.',
+    debt:'부채비율: 부채 ÷ 자기자본. 100% 이하면 안정적, 200%를 넘으면 빚 부담이 큰 편입니다(업종에 따라 다름).',
+    icr:'이자보상배율: 영업이익 ÷ 이자비용. 1배 미만이면 영업으로 번 돈으로 이자도 못 내는 상태, 3배 이상이면 안정적입니다.',
+    reserve:'유보율: (이익잉여금 + 자본잉여금) ÷ 자본금. 회사가 벌어서 쌓아 둔 돈이 자본금의 몇 배인지로, 높을수록 위기 대응 여력이 큽니다.',
+    fair:'적정주가: ① PER 밴드(과거 5년 PER 분포 × 기준 EPS) ② PBR 밴드(과거 PBR 분포 × BPS) ③ S-RIM(자기자본 + 초과이익의 현재가치) ④ DCF(잉여현금흐름 할인)를 가중평균했습니다. 모델이 맞지 않는 경우(예: 적자, 현금흐름 불안정, 자본 대비 이익이 과도)는 제외합니다.'
   };
   function tip(k){ return GLOSS[k] ? '<button type="button" class="tip" aria-label="용어 설명" data-tip="' + GLOSS[k] + '">?</button>' : ''; }
   (function initTips(){
@@ -587,6 +711,7 @@
     $('#tgt-updated').textContent = '일봉 기준 · ' + hhmmss(Date.now()).slice(0, 5) + ' 갱신';
     paintTargetLines();
     paintMarkers();
+    if (QT.Value) QT.Value.update(st, a);
     icons();
   }
 
@@ -819,6 +944,7 @@
       '<div class="body"><b><span class="ic"><i data-lucide="' + (CAT_ICON[e.cat] || 'calendar') + '"></i></span>' +
         '<span class="tt">' + e.title + '</span><span class="status-chip" data-s="' + e.status + '">' + e.status + '</span></b>' +
         '<p><span class="cty" data-c="' + e.country + '">' + COUNTRY[e.country] + '</span>' + EV.fmtDate(e.t) + ' <b class="tm">' + EV.fmtTime(e.t) + '</b> · ' + e.detail + '</p>' +
+        (QT.Home ? QT.Home.cmp(e) : '') +
         (e.imp >= 3 && e.why ? '<p class="why">' + e.why + '</p>' : '') +
       '</div></div>';
   }
@@ -868,7 +994,7 @@
       '<span class="er-d"><b class="num">' + md[0] + '</b><small>' + md[1].replace(/[()]/g, '') + '</small></span>' +
       '<span class="er-n"><b>' + (mine ? '<i data-lucide="star" class="mine" aria-label="관심종목"></i>' : '') + e.name + ' <span class="code">' + e.code + '</span></b>' +
         '<small>' + e.title + ' · ' + (e.local ? '현지 ' + e.local + ' ' : '') + e.whenLabel + '</small>' +
-        '<small class="tag">' + e.tag + '</small></span>' +
+        '<small class="tag">' + e.tag + '</small>' + (QT.Home ? QT.Home.cmp(Object.assign({ isEarn:true }, e)) : '') + '</span>' +
       '<span class="er-r"><span class="er-top"><span class="status-chip" data-s="' + e.status + '">' + e.status + '</span>' +
         '<em class="dd' + (soon ? ' soon' : '') + '">' + (past ? '발표됨' : EV.dday(e.t)) + '</em></span>' +
         '<small>한국 ' + EV.fmtTime(e.t) + '</small></span>' +
@@ -957,6 +1083,20 @@
   }
   function loadSymbol(resetView){
     const st = M.BY_CODE[state.code];
+    /* 공공데이터 일봉을 아직 안 받은 국내 종목 — 받은 뒤 다시 그린다 (이전 차트는 흐리게 유지) */
+    if (M.needsDaily(state.code)){
+      const code = state.code;
+      $('#chart-card').classList.add('is-loading');
+      $('#q-name').textContent = st.name;
+      $('#q-code').textContent = st.code + (st.en ? ' · ' + st.en : '');
+      $('#q-market').textContent = st.market;
+      $('#q-src').textContent = '공공데이터 불러오는 중'; $('#q-src').dataset.kind = 'real';
+      M.ensureDaily(code).then(function () { if (code === state.code) loadSymbol(resetView); });
+      return;
+    }
+    $('#chart-card').classList.remove('is-loading');
+    if ((state.tf === '1m' || state.tf === '5m') && feedMode() === 'static'){ setTf('1D'); return; }
+    if (state.tf === '1m' || state.tf === '5m') loadRealMinutes(state.code);
     if (!M.hasData(state.code)){
       showNoData(true);
       $('#q-name').textContent = st.name;
@@ -973,6 +1113,8 @@
       $('#summary').innerHTML = $('#events').innerHTML = $('#mtf').innerHTML = '<div class="empty">시세 데이터가 없어 분석할 수 없습니다.</div>';
       markKey = null; if (chart.ready) chart.series.candle.setMarkers([]);
       $('#tgt-updated').textContent = '—';
+      if (QT.Value) QT.Value.update(st, null, { force:true });
+      icons();
       if (state.panel === 'macro') renderEarnings();
       loadRealDaily(state.code);
       return;
@@ -988,18 +1130,36 @@
     loadRealDaily(state.code);
   }
 
-  /* 증권사 API(토스)가 연결돼 있으면 선택 종목의 실제 일봉 400개로 시뮬레이션·번들 일봉을 교체 */
+  /* 증권사 API(토스)가 연결돼 있으면
+       · 공공데이터 일봉이 있는 국내 종목: 공공데이터 마지막 거래일 이후 봉(전 영업일 · 오늘)만 토스 일봉으로 잇는다
+       · 그 외 종목(미국 등): 실제 일봉 400개로 번들 · 시뮬레이션 일봉을 교체 */
   const realDaily = {};
   function loadRealDaily(code){
     if (realDaily[code] || !QT.Feed.canFetchCandles()) return Promise.resolve();
     realDaily[code] = true;
-    return QT.Feed.fetchCandles(code, '1d', 400).then(function (list) {
-      if (!M.setDaily(code, list, 'toss')) return;
-      if (code === state.code) loadSymbol(false);
-      refreshRowPrices();
+    return M.ensureDaily(code).then(function () {
+      const krx = M.hasKrx(code) && M.isReal(code) && /^krx/.test(M.realSource(code) || '');
+      return QT.Feed.fetchCandles(code, '1d', krx ? 20 : 400).then(function (list) {
+        if (!(krx ? M.appendDaily(code, list, 'toss') : M.setDaily(code, list, 'toss'))) return;
+        if (code === state.code && state.tf !== '1m' && state.tf !== '5m') loadSymbol(false);
+        refreshRowPrices();
+      });
     }).catch(function (e) {
       delete realDaily[code];
       console.warn('[QT] 일봉 조회 실패', code, e.message);
+    });
+  }
+  /* 분봉 — 토스 연결 시 실제 1분봉 약 2거래일치 (공공데이터는 일봉만 제공) */
+  const realMin = {};
+  function loadRealMinutes(code){
+    if (realMin[code] || !QT.Feed.canFetchCandles()) return;
+    realMin[code] = true;
+    QT.Feed.fetchCandles(code, '1m', 800).then(function (list) {
+      if (!M.setMinutes(code, list, 'toss')) return;
+      if (code === state.code && (state.tf === '1m' || state.tf === '5m')) loadSymbol(true);
+    }).catch(function (e) {
+      delete realMin[code];
+      console.warn('[QT] 분봉 조회 실패', code, e.message);
     });
   }
   /* 관심종목도 전일 대비가 맞도록 한 종목씩 차례로 받는다 (차트 API 초당 20회 한도) */
@@ -1009,9 +1169,15 @@
     }, loadRealDaily(state.code));
   }
   function refreshLive(){
-    if (!M.hasData(state.code)) return;
+    if (!M.hasData(state.code) || M.needsDaily(state.code)) return;
     bars = M.series(state.code, state.tf);
     computeAnalysis();
+    if (chart.ready) updateLastPoints();
+    renderLegend(null);
+    renderQuote();
+    renderAnalysis();
+  }
+  function updateLastPoints(){
     pushLastBar();
     const i = bars.length - 1, t = sec(bars[i].t);
     if (state.ind.ma){
@@ -1027,15 +1193,49 @@
     if (ind.macd[i] != null) chart.series.macdLine.update({ time:t, value:ind.macd[i] });
     if (ind.macdSignal[i] != null) chart.series.macdSignal.update({ time:t, value:ind.macdSignal[i] });
     if (ind.macdHist[i] != null) chart.series.macdHist.update({ time:t, value:ind.macdHist[i], color: ind.macdHist[i] >= 0 ? COLORS.upFill : COLORS.downFill });
-    renderLegend(null);
-    renderQuote();
-    renderAnalysis();
   }
   function select(code){
     if (!M.BY_CODE[code]) return;
     state.code = code;
+    setView('stock');
     renderList(); loadSymbol(true); subscribeAll();
     if (window.innerWidth <= 900) closeDrawer();
+  }
+
+  /* ---------------- 화면 전환 (홈 ↔ 종목 분석) ---------------- */
+  function setView(v){
+    if (v !== 'home' && v !== 'stock') return;
+    const changed = state.view !== v;
+    state.view = v;
+    document.body.dataset.view = v;
+    $$('#vnav button').forEach(function (b) {
+      const on = b.dataset.view === v;
+      b.classList.toggle('on', on);
+      if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    try { localStorage.setItem(VIEW_KEY, v); } catch (e) {}
+    if (v === 'stock'){
+      /* 차트는 종목 분석 화면을 처음 열 때 만든다 — 홈에서 시작하면 차트 작업을 미루고, 폭 0인 상태로 만들지 않도록 */
+      if (!chart.ready && !chart.failed){
+        buildCharts();
+        if (bars.length && ind){ paintChart(true); renderLegend(null); }
+      } else {
+        resizeCharts();
+        if (pendingReset){ pendingReset = false; defaultRange(); }
+      }
+    } else {
+      if (isFs()) setFs(false);
+      if (QT.Home) QT.Home.render();
+    }
+    if (changed) window.scrollTo(0, 0);
+  }
+  /* 홈의 '전체 일정 · 증시 뉴스' → 종목 분석 화면의 글로벌 매크로 탭 */
+  function openMacro(){
+    setView('stock');
+    const b = $('#side-tabs button[data-panel="macro"]');
+    if (b) b.click();
+    const aside = $('.aside');
+    if (aside && aside.getBoundingClientRect().top > window.innerHeight * 0.5) aside.scrollIntoView({ behavior:'smooth', block:'start' });
   }
 
   /* ---------------- 이벤트 ---------------- */
@@ -1048,7 +1248,7 @@
       saveWL(); renderList(); subscribeAll();
       return;
     }
-    const row = e.target.closest('.wl-row');
+    const row = e.target.closest('.wl-row, .scr-card');
     if (row) select(row.dataset.code);
   });
   const qEl = $('#q');
@@ -1091,7 +1291,9 @@
     state.panel = b.dataset.panel;
     $$('#side-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
     $('#panel-analysis').hidden = state.panel !== 'analysis';
+    $('#panel-value').hidden = state.panel !== 'value';
     $('#panel-macro').hidden = state.panel !== 'macro';
+    if (QT.Value) QT.Value.setVisible(state.panel === 'value');
     if (NEWS) NEWS.active = state.panel === 'macro';
     if (state.panel === 'macro'){
       renderMacro();
@@ -1114,13 +1316,31 @@
     if (row) select(row.dataset.code);
   });
   $('#news-refresh').addEventListener('click', function () { if (NEWS) NEWS.refresh(true); });
-  if (NEWS) NEWS.on(function () { if (state.panel === 'macro') renderNews(); });
-  $('#tf-seg').addEventListener('click', function (e) {
-    const b = e.target.closest('button'); if (!b) return;
-    state.tf = b.dataset.tf;
-    $$('#tf-seg button').forEach(function (x) { x.classList.toggle('on', x === b); });
-    loadSymbol(true);
+  $('#combo-strip').addEventListener('click', function () {
+    const b = $('#side-tabs button[data-panel="value"]');
+    if (b) b.click();
+    $('#side-tabs').scrollIntoView({ behavior:'smooth', block:'nearest' });
   });
+  if (NEWS) NEWS.on(function () { if (state.panel === 'macro') renderNews(); });
+  function setTf(tf){
+    state.tf = tf;
+    $$('#tf-seg button').forEach(function (x) { x.classList.toggle('on', x.dataset.tf === tf); });
+    loadSymbol(true);
+  }
+  $('#tf-seg').addEventListener('click', function (e) {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    setTf(b.dataset.tf);
+  });
+  /* 공공데이터 종가 모드에서는 분봉이 없다 — 토스증권 연결 시 실제 1분봉 */
+  function feedMode(){ return (QT.Feed.status && QT.Feed.status.mode) || 'connecting'; }
+  function syncTfAvail(){
+    const off = feedMode() === 'static';
+    $$('#tf-seg button[data-tf="1m"], #tf-seg button[data-tf="5m"]').forEach(function (b) {
+      b.disabled = off;
+      b.title = off ? '공공데이터는 일봉만 제공합니다 — 분봉은 토스증권 실시간 연결 시 표시됩니다' : '';
+    });
+    if (off && (state.tf === '1m' || state.tf === '5m')) setTf('1D');
+  }
   $('#ind-seg').addEventListener('click', function (e) {
     const b = e.target.closest('button'); if (!b) return;
     const k = b.dataset.ind;
@@ -1131,6 +1351,32 @@
     paintChart(false); renderLegend(null);
   });
 
+  $('#vnav').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view);
+  });
+  $('#chart-ctl').addEventListener('click', function (e) {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'fs-btn') return setFs(!isFs());
+    if (b.dataset.z === 'in') zoomBy(0.8);
+    else if (b.dataset.z === 'out') zoomBy(1.25);
+    else if (b.dataset.z === 'reset') defaultRange();
+  });
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement && isFs()) setFs(false);    // 브라우저에서 Esc 로 나간 경우
+  });
+  document.addEventListener('keydown', function (e) {
+    if (state.view !== 'stock' || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || $('#modal').classList.contains('show') || (QT.Home && QT.Home.popOpen)) return;
+    const fs = isFs();
+    if (e.key === 'Escape' && fs){ setFs(false); return; }
+    if (e.key === 'f' || e.key === 'F'){ e.preventDefault(); setFs(!fs); return; }
+    if (e.key === '+' || e.key === '='){ e.preventDefault(); zoomBy(0.8); }
+    else if (e.key === '-' || e.key === '_'){ e.preventDefault(); zoomBy(1.25); }
+    else if (e.key === '0'){ e.preventDefault(); defaultRange(); }
+    else if (fs && e.key === 'ArrowLeft'){ e.preventDefault(); panBy(-120); }
+    else if (fs && e.key === 'ArrowRight'){ e.preventDefault(); panBy(120); }
+  });
+
   function openDrawer(){ $('#side').classList.add('open'); $('#scrim').classList.add('show'); }
   function closeDrawer(){ $('#side').classList.remove('open'); $('#scrim').classList.remove('show'); }
   $('#menu-btn').addEventListener('click', function () { $('#side').classList.contains('open') ? closeDrawer() : openDrawer(); });
@@ -1138,8 +1384,10 @@
 
   /* ---------------- 연결 설정 ---------------- */
   function fillModal(provider){
-    const c = QT.Feed.getConfig(), toss = provider === 'toss';
+    const c = QT.Feed.getConfig(), toss = provider === 'toss', remote = provider === 'toss' || provider === 'kis';
     const p = provider === 'kis' ? c.kis : c.toss;
+    $('#fld-proxy').hidden = $('#fld-ws').hidden = !remote;
+    $('#m-save').textContent = remote ? '연결하기' : '저장';
     $('#f-proxy').value = p.proxyBase || (toss ? QT.TOSS_DEFAULT_PROXY : '');
     $('#f-proxy').placeholder = toss ? QT.TOSS_DEFAULT_PROXY : 'https://my-server.com/kis';
     $('#f-token').value = provider === 'kis' ? (c.kis.approvalKey || '') : (c.toss.key || '');
@@ -1147,7 +1395,7 @@
     $('#f-token-label').textContent = toss ? '프록시 접속 키 (원격 서버일 때)' : 'KIS approval_key (개발용)';
     $('#f-ws').value = p.wsUrl || '';
     $('#f-ws').placeholder = toss ? '비우면 프록시 주소 + /ws' : 'wss://... (미입력 시 REST 1초 폴링)';
-    $('#fld-token').hidden = provider === 'mock';
+    $('#fld-token').hidden = !remote;
     $('#toss-guide').hidden = !toss;
   }
   /* 연결 링크 — #toss=<프록시 주소>&key=<접속 키> (tools/server/setup.sh 가 출력)
@@ -1205,19 +1453,22 @@
     QT.Feed.subscribe(codes);
     loadRealDailyAll();
   }
-  const FEED_TEXT = { live:'실시간 수신 중', mock:'모의 시세', connecting:'연결 중', error:'연결 실패' };
+  const FEED_TEXT = { live:'실시간 수신 중', mock:'모의 시세 (데모)', connecting:'연결 중', error:'연결 실패', static:'종가 기준' };
   QT.Feed.on('status', function (s) {
     if (s.mode === 'live') loadRealDailyAll();
     const pill = $('#feed-pill'), tag = $('#live-tag');
     pill.dataset.mode = s.mode;
-    $('#feed-text').textContent = s.mode === 'live' ? '실시간' : FEED_TEXT[s.mode] || s.mode;
+    $('#feed-text').textContent = s.mode === 'live' ? '실시간' : s.mode === 'static' ? '공공데이터' : FEED_TEXT[s.mode] || s.mode;
     pill.title = s.reason || '';
     tag.dataset.mode = s.mode;
     $('#live-tag-text').textContent = FEED_TEXT[s.mode] || s.mode;
     tag.title = s.reason || '';
-    $('#acct-state').textContent = s.mode === 'live' ? '실시간 연결됨' : s.mode === 'mock' ? '모의 데이터 모드' : (s.reason || '연결 중');
+    $('#acct-state').textContent = s.mode === 'live' ? '실시간 연결됨' : s.mode === 'mock' ? '모의 데이터 모드'
+      : s.mode === 'static' ? '공공데이터 종가 모드' : (s.reason || '연결 중');
     $('#acct-source').textContent = s.source || '—';
-    $('#connect-btn').innerHTML = s.mode === 'live' ? '<i data-lucide="settings-2"></i>연결 설정 변경' : '<i data-lucide="plug-zap"></i>실시간 시세 연결';
+    $('#connect-btn').innerHTML = s.mode === 'live' ? '<i data-lucide="settings-2"></i>연결 설정 변경' : '<i data-lucide="plug-zap"></i>토스증권 실시간 연결';
+    syncTfAvail();
+    if (analysis && !M.needsDaily(state.code)) renderQuote();
     icons();
   });
 
@@ -1227,18 +1478,34 @@
   setInterval(function () {
     if (document.hidden) return;
     const now = Date.now();
-    refreshRowPrices();
+    if (QT.Screener && QT.Screener.cfg.on) QT.Screener.tick($('#wl'), state.tab, state.mkt, state.watchlist);
+    else refreshRowPrices();
     if (dirty && now - lastPanel > 1000){ dirty = false; lastPanel = now; refreshLive(); }
     const at = QT.Feed.lastTickAt;
-    $('#live-tag-time').textContent = at ? hhmmss(at) : '--:--:--';
+    $('#live-tag-time').textContent = feedMode() === 'static' ? lastBarDay() : at ? hhmmss(at) : '--:--:--';
     const ago = at ? Math.round((now - at) / 1000) : null;
     $('#acct-latency').textContent = ago == null ? '—' : (ago < 2 ? '방금 전' : ago + '초 전');
   }, 700);
 
+  /* 종가 기준 모드에서 차트 우상단에 보여 줄 마지막 일봉 날짜 */
+  function lastBarDay(){
+    const d = M.hasData(state.code) && !M.needsDaily(state.code) ? M.daily(state.code) : null;
+    if (!d || !d.length) return '';
+    const t = new Date(d[d.length - 1].t);
+    return pad2(t.getUTCMonth() + 1) + '.' + pad2(t.getUTCDate());
+  }
+
   /* ---------------- 시작 ---------------- */
   function boot(){
     icons();
-    buildCharts();
+    if (QT.Home) QT.Home.init({ select:select, openMacro:openMacro, tip:tip });
+    if (QT.Value) QT.Value.init({ select:select, tip:tip });
+    if (QT.Screener) QT.Screener.init({ select:select, refresh:renderList, current:function () { return state.code; } });
+    setView(state.view);                              // 종목 분석 화면이면 여기서 차트를 만든다
+    /* 시장 스냅샷(예상치 · 이번 주 확정 일정)이 도착하면 매크로 탭 일정도 다시 그린다 */
+    if (QT.Markets) QT.Markets.on(function (kind) {
+      if (kind === 'snapshot' && state.panel === 'macro'){ renderMacroList(); renderEarnings(); }
+    });
     $('#wl').innerHTML = '<div class="loading">종목 데이터를 불러오는 중…</div>';
     M.init().then(function (meta) {
       QT.Search.build(M.UNIVERSE.map(function (s) {
@@ -1257,9 +1524,11 @@
       /* 일봉·일정은 뒤늦게 도착 — 도착 시 현재 종목을 다시 그린다 */
       M.onLate(function (kind) {
         if (kind === 'history'){ renderList(); loadSymbol(true); }
+        else if (kind === 'fundamentals'){ if (QT.Screener && QT.Screener.cfg.on){ QT.Screener.invalidate(); renderList(); } }
         else if (kind === 'events'){
           if (state.panel === 'macro') renderMacro();
           if (analysis) renderAnalysis();
+          if (QT.Home) QT.Home.renderDday();
         }
         const m = M.meta();
         if (m.real) console.info('[QT] 실제 일봉 ' + m.real + '종목 로드');

@@ -2,14 +2,23 @@
 #   tools/build_*.py 를 GitHub 러너에서 실행하고 바뀐 assets/data/*.json 을 같은 브랜치에 커밋합니다.
 #   · 수동 실행: Actions → build-data → Run workflow (기본 브랜치에 이 파일이 있어야 버튼이 보입니다)
 #   · 이 파일이나 수집기(tools/build_*.py)를 수정해 푸시하면 해당 브랜치에서 한 번 실행됩니다.
+#   · 예약 실행(기본 브랜치): 평일 한국장 중 3회 + 장 마감 직후 홈 대시보드 시세(markets),
+#     매일 06:40 KST 미국장 마감 뒤 시세 · 일정 · 뉴스 전체, 매주 월 07:20 KST 재무 · 가치분석(fundamentals, 약 15분).
+#     시각은 UTC 기준이며 GitHub 사정으로 늦어질 수 있습니다.
+#     브라우저는 CNBC 실시간 시세로 덮어쓰므로, 예약 수집은 코스피200 선물 · 공포/탐욕 · 수급 · 예상치 갱신용입니다.
 name: build-data
 
 on:
+  schedule:
+    - cron: '10 0,2,4 * * 1-5'      # 09:10 · 11:10 · 13:10 KST
+    - cron: '45 6 * * 1-5'          # 15:45 KST (국내 장 마감 · 최종 수급)
+    - cron: '40 21 * * *'           # 06:40 KST (미국장 마감 · 전체)
+    - cron: '20 22 * * 0'           # 월 07:20 KST (재무 · 가치분석 — 분기 실적이라 주 1회)
   workflow_dispatch:
     inputs:
       scripts:
-        description: '실행할 수집기 (공백 구분: us events news dataset)'
-        default: 'us events news'
+        description: '실행할 수집기 (공백 구분: markets us events news dataset fundamentals)'
+        default: 'markets us events news'
         required: true
   push:
     paths:
@@ -37,7 +46,7 @@ jobs:
       - name: 수집기 실행
         env:
           TZ: Asia/Seoul
-          SCRIPTS: ${{ github.event.inputs.scripts || 'us events news' }}
+          SCRIPTS: ${{ github.event.inputs.scripts || (github.event_name == 'schedule' && (github.event.schedule == '40 21 * * *' && 'markets events news' || github.event.schedule == '20 22 * * 0' && 'fundamentals' || 'markets') || 'markets us events news') }}
         run: |
           status=0
           for s in $SCRIPTS; do
@@ -58,4 +67,6 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "데이터 갱신 ($(date +%Y-%m-%d\ %H:%M) KST, build-data)"
+          # 예약 실행 중에 다른 커밋이 올라왔을 수 있으니 최신 위에 다시 얹어서 올린다
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
