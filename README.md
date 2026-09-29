@@ -91,13 +91,54 @@ python3 tools/build_news.py         # 증시 뉴스 스냅샷 (실시간 피드 
 
 프록시 안전장치
 - `127.0.0.1`에만 바인딩하고, localhost 페이지의 요청·웹소켓만 받습니다(다른 사이트가 몰래 붙지 못함).
-  배포본(`https://nowjay.github.io`)에서 쓰려면 `.env`에 `TOSS_ALLOWED_ORIGINS`를 추가하세요(브라우저에 따라 HTTPS→localhost 호출이 막힐 수 있음).
+- 다른 사이트를 허용(`TOSS_ALLOWED_ORIGINS`)하거나 리버스 프록시를 거쳐 들어온 요청은 **접속 키(`TOSS_PROXY_KEY`) 없이는 거부**합니다.
 - **주문·계좌·조건주문 API는 중계하지 않습니다** — 시세·종목·시장 정보 GET만 통과합니다.
 - 토큰은 클라이언트당 1개만 유효합니다. 프록시가 새로 발급하면 다른 스크립트에서 쓰던 토큰은 `token-revoked`가 됩니다.
 - 토스 웹소켓은 계정당 동시 2개까지라, 탭을 여러 개 열어도 프록시가 업스트림 1개를 공유합니다.
 
 > 토스증권 데이터 이용 정책상 API로 받은 정보는 **본인 매매 목적**으로만 쓸 수 있고 제3자 배포가 금지됩니다.
 > 토스 데이터는 브라우저에서 실시간으로만 받고 `assets/data/`나 배포본에 저장하지 않습니다.
+
+### 다른 기기에서 보기 (클라우드 서버)
+
+휴대폰이나 다른 PC(다른 IP)에서도 토스 실시간 데이터를 보려면, **고정 IP 서버**에서 프록시를 24시간 돌리고
+배포본(`https://nowjay.github.io/...`)에서 그 서버로 접속합니다. 핫스팟처럼 IP가 자주 바뀌는 문제도 함께 사라집니다.
+
+```
+휴대폰·PC 브라우저 ──https + 접속 키──▶ Caddy(HTTPS) ──▶ toss_proxy.py ──▶ 토스증권
+                                     └───────── 고정 IP 서버 ─────────┘
+```
+
+1. **서버 만들기** (둘 중 하나, Ubuntu 22.04/24.04)
+   - AWS Lightsail: 서울 리전 · Linux/Unix · OS 전용 Ubuntu · IPv4 포함 가장 작은 플랜 →
+     *네트워킹* 탭에서 **고정 IP 생성·연결**, IPv4 방화벽에 **HTTPS(443)** 추가
+   - Oracle Cloud 무료 등급: Ubuntu 인스턴스 · **예약 공인 IP** 연결 · Security List에 80, 443 허용
+2. **설치** — 서버 SSH 창에서:
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/nowjay/quant-stock-dashboard/main/tools/server/setup.sh
+   sudo bash setup.sh
+   ```
+   client_id·secret을 물어보고(서버의 `/opt/toss-proxy/.env`에만 저장), 접속 키를 만들어 HTTPS까지 설정합니다.
+   도메인은 가입이 필요 없는 `<서버IP>.sslip.io`를 기본으로 씁니다.
+3. **허용 IP** — 끝에 출력되는 서버 IP를 토스증권 허용 IP에 등록합니다.
+4. **각 기기에서** — 설치 끝에 나오는 **연결 링크**(휴대폰은 **QR**)를 엽니다. 설정창에 주소와 접속 키가 채워지면
+   내 서버 주소인지 확인하고 연결하기를 누릅니다(링크만으로 자동 연결되지는 않음). 키는 그 브라우저에만 저장되고,
+   링크의 키는 열자마자 주소창에서 지워집니다. 직접 입력: 톱니 → `토스증권 Open API` → 프록시 주소 · 접속 키.
+5. **이 PC의 로컬 프록시는 끄세요.** 토큰은 클라이언트당 1개라 두 곳에서 돌리면 서로의 토큰을 무효화합니다.
+   이 PC에서도 서버 주소와 키로 연결하면 됩니다.
+
+- 접속 키는 비밀번호입니다. 다른 사람에게 알려주면 토스 데이터를 제3자에게 주는 셈이 됩니다.
+- 프록시 코드 갱신: 서버에서 `sudo bash setup.sh`를 다시 실행 (`.env`·도메인 유지). 로그: `sudo journalctl -u toss-proxy -f`
+
+### 친구와 함께 쓰기
+
+사이트는 누구나 함께 볼 수 있고, 토스 실시간 시세는 **각자 자기 토스증권 키**로 받습니다.
+토스 약관상 한 사람의 API 데이터를 여러 사람에게 보여줄 수 없기 때문입니다.
+친구에게는 안내 페이지만 보내면 됩니다 — 위 설치 과정을 자기 계좌·서버로 따라 하게 되어 있습니다.
+
+**안내 페이지: https://nowjay.github.io/quant-stock-dashboard/toss-guide.html** (설정창의 `설정 방법 보기`에서도 열림)
+
+키 없이 들어온 방문자에게는 번들 데이터와 모의 시세가 보입니다.
 
 ### 3. 글로벌 매크로 뉴스 & 주요 일정
 우측 패널 `글로벌 매크로` 탭은 개별 종목이 아니라 **증시 전체에 영향을 주는 일정과 뉴스**를 모아 보여 줍니다.
@@ -169,7 +210,8 @@ assets/core/events.js          매크로 일정 · 실적 시즌 캘린더 (확�
 assets/core/news.js            증시 뉴스 피드 (RSS 중계 · 스냅샷 · 카테고리 분류)
 assets/core/fx.js              USD/KRW 환율
 assets/feed/{kis,toss,mock,index}.js   실시간 피드 어댑터와 파사드
-tools/toss_proxy.py            토스증권 Open API 로컬 프록시 (토큰 보관 · REST/웹소켓 중계)
+tools/toss_proxy.py            토스증권 Open API 프록시 (토큰 보관 · REST/웹소켓 중계 · 접속 키)
+tools/server/setup.sh          클라우드 서버에 프록시 + HTTPS(Caddy) 설치
 assets/data/*.json             수집된 종목·시세·일봉·일정 데이터
 tools/build_*.py               데이터 수집 스크립트
 legacy/terminal-dark.html      초기 다크 터미널 버전

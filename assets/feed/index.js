@@ -15,7 +15,7 @@ window.QT = window.QT || {};
   const DEFAULTS = {
     provider: 'mock',                                   // mock | kis | toss
     kis:  { approvalKey:'', proxyBase:'', wsUrl:'', demo:false },
-    toss: { proxyBase:'http://127.0.0.1:8778', wsUrl:'', pollMs:1000 }   // tools/toss_proxy.py
+    toss: { proxyBase:'http://127.0.0.1:8778', wsUrl:'', key:'', pollMs:1000 }   // tools/toss_proxy.py
   };
 
   function readConfig(){

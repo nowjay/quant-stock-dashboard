@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>토스증권 실시간 시세 연결 안내 · QUANT</title>
+<meta name="description" content="각자 본인의 토스증권 Open API 키로 QUANT 대시보드에 실시간 시세를 연결하는 방법">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#F9FAFB; --card:#FFFFFF; --hair:#F3F4F6; --line:#E5E7EB;
+    --ink:#191F28; --ink-2:#4E5968; --muted:#8B95A1;
+    --blue:#3182F6; --blue-ink:#1B64DA; --blue-weak:#EBF3FE;
+    --amber-weak:#FEF6E7; --amber-ink:#B54708; --up:#F04438; --up-weak:#FEF0EF;
+    --r:16px;
+    --sans:'Gothic A1',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:28px 16px 64px}
+  .back{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:700}
+  .back:hover{color:var(--blue)}
+  h1{font-size:26px;line-height:1.3;letter-spacing:-.02em;margin:18px 0 8px;text-wrap:balance}
+  .lead{color:var(--ink-2);margin:0 0 20px}
+  .card{background:var(--card);border-radius:var(--r);box-shadow:0 1px 3px rgba(0,0,0,.05);padding:20px;margin-bottom:14px}
+  .why{display:flex;gap:10px;background:var(--blue-weak);color:var(--blue-ink);border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:14px}
+  .why b{color:var(--ink)}
+  .need{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0;padding:0;list-style:none}
+  .need li{background:var(--hair);border-radius:12px;padding:12px;font-size:13px;color:var(--ink-2)}
+  .need b{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
+  @media (max-width:560px){.need{grid-template-columns:1fr}}
+  ol.steps{counter-reset:s;list-style:none;margin:0;padding:0}
+  ol.steps>li{counter-increment:s;position:relative;padding-left:44px;margin-bottom:22px}
+  ol.steps>li:last-child{margin-bottom:0}
+  ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;
+    background:var(--blue);color:#fff;font-weight:800;font-size:14px;display:grid;place-items:center}
+  h2{font-size:17px;margin:0 0 12px;letter-spacing:-.01em}
+  h3{font-size:15.5px;margin:3px 0 6px}
+  p{margin:0 0 8px}
+  ul.sub{margin:6px 0 0;padding-left:18px;color:var(--ink-2);font-size:14px}
+  ul.sub li{margin-bottom:4px}
+  .path{font-weight:700;color:var(--ink)}
+  .cmd{display:flex;align-items:stretch;background:#111827;border-radius:10px;margin:8px 0;overflow:hidden}
+  .cmd code{flex:1;min-width:0;color:#E5E7EB;font-family:var(--mono);font-size:12.5px;padding:11px 12px;overflow-x:auto;white-space:pre}
+  .cmd button{flex:none;border:0;background:#1F2937;color:#D1D5DB;font:700 12px var(--sans);padding:0 14px;cursor:pointer}
+  .cmd button:hover{background:#374151;color:#fff}
+  code.in{font-family:var(--mono);font-size:12.5px;background:var(--hair);border-radius:6px;padding:1px 6px}
+  .ok{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:700}
+  .pill.live{background:#ECFDF3;color:#067647}
+  .pill.src{background:var(--blue-weak);color:var(--blue-ink)}
+  .pill.live::before{content:'';width:7px;height:7px;border-radius:50%;background:#12B76A}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;vertical-align:top;padding:10px 8px;border-top:1px solid var(--hair)}
+  th{width:42%;font-weight:700;color:var(--ink)}
+  td{color:var(--ink-2)}
+  tr:first-child th,tr:first-child td{border-top:0}
+  @media (max-width:560px){th,td{display:block;width:auto;padding:4px 0}th{padding-top:12px}}
+  .warn{background:var(--up-weak);color:#912018;border-radius:12px;padding:14px 16px;font-size:14px}
+  .warn ul{margin:6px 0 0;padding-left:18px}
+  .note{color:var(--muted);font-size:13px}
+  a{color:var(--blue-ink)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <a class="back" href="./">← 대시보드로</a>
+  <h1>토스증권 실시간 시세 연결하기</h1>
+  <p class="lead">이 대시보드는 누구나 볼 수 있지만, 토스증권 실시간 시세는 <b>각자 본인의 토스증권 Open API 키</b>로 연결해야 보입니다.
+    한 번 설정해 두면 휴대폰·PC 어디서든 내 시세가 뜹니다.</p>
+
+  <div class="why">
+    <span>ℹ️</span>
+    <span>토스증권 약관상 API로 받은 정보는 <b>본인 매매 목적으로만</b> 쓸 수 있고, 다른 사람에게 보여주거나 나눠줄 수 없습니다.
+      그래서 한 사람의 키로 모두에게 보여주지 않고, 각자 자기 키로 자기 화면에만 받습니다.</span>
+  </div>
+
+  <section class="card">
+    <h2>준비물</h2>
+    <ul class="need">
+      <li><b>토스증권 계좌</b>Open API 키를 발급받을 본인 계좌</li>
+      <li><b>클라우드 서버 1대</b>AWS Lightsail(유료, 소액) 또는 Oracle Cloud 무료 등급</li>
+      <li><b>20~30분</b>명령어는 복사·붙여넣기 두 줄</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>설정 순서</h2>
+    <ol class="steps">
+      <li>
+        <h3>토스증권 Open API 키 발급</h3>
+        <p>PC에서 토스증권 웹(WTS)에 로그인 → <span class="path">설정 → Open API</span>에서
+          <code class="in">client_id</code>와 <code class="in">client_secret</code>을 발급받습니다.</p>
+        <ul class="sub"><li>화면의 <b>복사 버튼</b>으로 복사해 두세요. 앞뒤 공백이 섞이면 인증이 실패합니다.</li></ul>
+      </li>
+      <li>
+        <h3>서버 만들기 (고정 IP)</h3>
+        <p>토스증권은 등록한 IP에서만 API를 허용하므로, <b>IP가 바뀌지 않는 서버</b>가 필요합니다.</p>
+        <ul class="sub">
+          <li><b>AWS Lightsail</b> — 리전 <b>서울</b>, Linux/Unix, <b>OS 전용 → Ubuntu 24.04</b>, IPv4가 포함된 가장 작은 플랜으로 생성
+            → <span class="path">네트워킹</span> 탭에서 <b>고정 IP 생성·연결</b>, IPv4 방화벽에 <b>HTTPS(443)</b> 추가</li>
+          <li><b>Oracle Cloud 무료 등급</b> — Ubuntu 인스턴스 생성 → <b>예약 공인 IP</b> 연결 → Security List에 TCP 80·443 허용</li>
+        </ul>
+      </li>
+      <li>
+        <h3>프록시 설치</h3>
+        <p>서버 콘솔의 <span class="path">SSH로 연결</span> 창에서 아래 두 줄을 차례로 붙여넣습니다.</p>
+        <div class="cmd"><code>curl -fsSLO https://raw.githubusercontent.com/nowjay/quant-stock-dashboard/main/tools/server/setup.sh</code><button type="button">복사</button></div>
+        <div class="cmd"><code>sudo bash setup.sh</code><button type="button">복사</button></div>
+        <ul class="sub">
+          <li>client_id, client_secret을 물어보면 붙여넣습니다. secret은 입력해도 화면에 보이지 않는 게 정상입니다.</li>
+          <li>나머지 질문은 <b>Enter</b>로 기본값을 쓰면 됩니다. 키는 내 서버에만 저장됩니다.</li>
+          <li>끝나면 <b>서버 IP · 연결 링크 · QR 코드</b>가 나옵니다.</li>
+        </ul>
+      </li>
+      <li>
+        <h3>허용 IP 등록</h3>
+        <p>설치 끝에 나온 <b>서버 IP</b>를 토스증권 WTS <span class="path">설정 → Open API → 허용 IP 관리</span>에 등록합니다.</p>
+      </li>
+      <li>
+        <h3>기기마다 연결</h3>
+        <p>휴대폰은 <b>QR 코드를 찍고</b>, PC는 <b>연결 링크</b>를 엽니다. 설정창에 주소와 접속 키가 채워져 있으면 주소가 내 서버인지 확인하고 <b>연결하기</b>를 누르세요.</p>
+        <ul class="sub"><li>직접 입력하려면: 대시보드 우상단 톱니 → 데이터 소스 <b>토스증권 Open API</b> → 프록시 주소와 접속 키 입력</li></ul>
+        <div class="ok"><span class="pill live">실시간</span><span class="pill src">토스증권 일봉</span></div>
+        <p class="note">화면 우상단에 <b>실시간</b>, 종목 이름 옆에 <b>토스증권 일봉</b>이 보이면 연결된 것입니다.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>안 될 때</h2>
+    <table>
+      <tr><th>"허용 IP 가 아닙니다"</th><td>4단계에서 등록한 IP가 설치 끝에 나온 서버 IP와 같은지 확인하세요. 서버에 고정 IP를 연결하기 전에 설치했다면 IP가 바뀌었을 수 있습니다.</td></tr>
+      <tr><th>"client_id / client_secret 이 틀렸습니다"</th><td>서버에서 <code class="in">sudo rm /opt/toss-proxy/.env</code> 후 <code class="in">sudo bash setup.sh</code>를 다시 실행해 복사 버튼으로 붙여넣으세요.</td></tr>
+      <tr><th>"프록시에 연결할 수 없습니다"</th><td>클라우드 콘솔 방화벽에서 TCP 80·443이 열려 있는지 확인하세요. 인증서 로그: <code class="in">sudo journalctl -u caddy -n 30</code></td></tr>
+      <tr><th>"접속 키가 틀렸습니다"</th><td>연결 링크를 다시 열거나, 서버에서 <code class="in">sudo bash setup.sh</code>를 다시 실행하면 링크가 다시 나옵니다.</td></tr>
+      <tr><th>서버 로그에 "토큰이 무효화됐습니다"</th><td>같은 키로 프록시를 두 곳(예: 내 PC와 서버)에서 돌리고 있습니다. 토큰은 계정당 1개라 한 곳만 켜 두세요.</td></tr>
+      <tr><th>그 밖의 문제</th><td>서버에서 <code class="in">sudo journalctl -u toss-proxy -f</code>로 로그를 확인하세요.</td></tr>
+    </table>
+  </section>
+
+  <div class="warn">
+    <b>접속 키와 연결 링크는 비밀번호입니다.</b>
+    <ul>
+      <li>다른 사람에게 보내지 마세요. 공유하면 내 토스 데이터를 남에게 주는 셈이 되어 약관 위반입니다. 친구는 이 안내대로 자기 키를 만들면 됩니다.</li>
+      <li>프록시는 시세 조회만 중계하고 <b>주문·계좌 API는 막혀 있어</b>, 키가 새더라도 주문은 할 수 없습니다.</li>
+      <li>시세는 서버나 이 사이트에 저장되지 않고 내 브라우저에만 표시됩니다.</li>
+    </ul>
+  </div>
+</main>
+<script>
+  document.querySelectorAll('.cmd button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = b.previousElementSibling.textContent;
+      var done = function () { b.textContent = '복사됨'; setTimeout(function () { b.textContent = '복사'; }, 1500); };
+      try { navigator.clipboard.writeText(text).then(done, function () {}); } catch (e) {}
+    });
+  });
+</script>
+</body>
+</html>

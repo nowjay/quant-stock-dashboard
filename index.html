@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20260929b">
+<link rel="stylesheet" href="assets/css/app.css?v=20260929d">
 </head>
 <body>
 
@@ -264,11 +264,15 @@
         <option value="toss">토스증권 Open API</option>
       </select>
     </div>
+    <div class="warn" id="link-note" hidden>
+      <i data-lucide="link"></i>
+      <span>연결 링크의 주소와 접속 키를 채웠습니다. <b id="link-note-url"></b> 가 <b>내가 만든 서버</b>가 맞는지 확인한 뒤 연결하기를 누르세요.</span>
+    </div>
     <div class="warn" id="toss-guide" hidden>
       <i data-lucide="terminal"></i>
-      <span>토스증권은 브라우저에서 직접 호출할 수 없어 <b>로컬 프록시</b>가 필요합니다.
-        <code>.env</code>에 client_id·secret을 넣고 <code>.venv/bin/python tools/toss_proxy.py</code>를 실행한 뒤 연결하세요.
-        WTS 설정 &gt; Open API &gt; <b>허용 IP 관리</b>에 현재 공인 IP도 등록해야 합니다.</span>
+      <span>토스증권 실시간 시세는 <b>각자 본인의 토스증권 Open API 키</b>로만 볼 수 있습니다.
+        내 서버에 프록시를 설치한 뒤 그 <b>https:// 주소와 접속 키</b>를 입력하세요.
+        <a href="toss-guide.html" target="_blank" rel="noopener">설정 방법 보기 →</a></span>
     </div>
     <div class="field">
       <label for="f-proxy">프록시 주소 (권장)</label>
@@ -276,7 +280,7 @@
       <div class="hint">서버가 토큰을 보관하고 시세만 중계하는 방식입니다. 입력하면 토큰 필드는 사용하지 않습니다.</div>
     </div>
     <div class="field" id="fld-token">
-      <label for="f-token">KIS approval_key (개발용)</label>
+      <label for="f-token" id="f-token-label">KIS approval_key (개발용)</label>
       <input id="f-token" type="password" placeholder="KIS approval_key" autocomplete="off">
       <div class="hint">이 브라우저에만 저장됩니다(localStorage). 공유 PC에서는 사용하지 마세요.</div>
     </div>
@@ -314,21 +318,21 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20260929b"></script>
-<script src="assets/core/search.js?v=20260929b"></script>
-<script src="assets/core/events.js?v=20260929b"></script>
-<script src="assets/core/market-data.js?v=20260929b"></script>
-<script src="assets/core/indicators.js?v=20260929b"></script>
-<script src="assets/core/scoring.js?v=20260929b"></script>
-<script src="assets/core/patterns.js?v=20260929b"></script>
-<script src="assets/core/targets.js?v=20260929b"></script>
-<script src="assets/core/analysis.js?v=20260929b"></script>
-<script src="assets/core/backtest.js?v=20260929b"></script>
-<script src="assets/core/news.js?v=20260929b"></script>
-<script src="assets/feed/mock.js?v=20260929b"></script>
-<script src="assets/feed/kis.js?v=20260929b"></script>
-<script src="assets/feed/toss.js?v=20260929b"></script>
-<script src="assets/feed/index.js?v=20260929b"></script>
-<script src="assets/app.js?v=20260929b"></script>
+<script src="assets/core/fx.js?v=20260929d"></script>
+<script src="assets/core/search.js?v=20260929d"></script>
+<script src="assets/core/events.js?v=20260929d"></script>
+<script src="assets/core/market-data.js?v=20260929d"></script>
+<script src="assets/core/indicators.js?v=20260929d"></script>
+<script src="assets/core/scoring.js?v=20260929d"></script>
+<script src="assets/core/patterns.js?v=20260929d"></script>
+<script src="assets/core/targets.js?v=20260929d"></script>
+<script src="assets/core/analysis.js?v=20260929d"></script>
+<script src="assets/core/backtest.js?v=20260929d"></script>
+<script src="assets/core/news.js?v=20260929d"></script>
+<script src="assets/feed/mock.js?v=20260929d"></script>
+<script src="assets/feed/kis.js?v=20260929d"></script>
+<script src="assets/feed/toss.js?v=20260929d"></script>
+<script src="assets/feed/index.js?v=20260929d"></script>
+<script src="assets/app.js?v=20260929d"></script>
 </body>
 </html>

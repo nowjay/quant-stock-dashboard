@@ -1142,16 +1142,33 @@
     const p = provider === 'kis' ? c.kis : c.toss;
     $('#f-proxy').value = p.proxyBase || (toss ? QT.TOSS_DEFAULT_PROXY : '');
     $('#f-proxy').placeholder = toss ? QT.TOSS_DEFAULT_PROXY : 'https://my-server.com/kis';
-    $('#f-token').value = provider === 'kis' ? (c.kis.approvalKey || '') : '';
+    $('#f-token').value = provider === 'kis' ? (c.kis.approvalKey || '') : (c.toss.key || '');
+    $('#f-token').placeholder = toss ? '이 PC의 프록시는 비워 두세요' : 'KIS approval_key';
+    $('#f-token-label').textContent = toss ? '프록시 접속 키 (원격 서버일 때)' : 'KIS approval_key (개발용)';
     $('#f-ws').value = p.wsUrl || '';
     $('#f-ws').placeholder = toss ? '비우면 프록시 주소 + /ws' : 'wss://... (미입력 시 REST 1초 폴링)';
-    $('#fld-token').hidden = provider !== 'kis';
+    $('#fld-token').hidden = provider === 'mock';
     $('#toss-guide').hidden = !toss;
   }
-  function openModal(){
-    const c = QT.Feed.getConfig();
-    $('#f-provider').value = c.provider;
-    fillModal(c.provider);
+  /* 연결 링크 — #toss=<프록시 주소>&key=<접속 키> (tools/server/setup.sh 가 출력)
+     바로 연결하지 않고 설정창에 채워 보여준다 — 남이 보낸 링크로 모르는 서버에 붙지 않도록.
+     키가 방문 기록에 남지 않게 주소창에서는 즉시 지운다. */
+  function readConnectLink(){
+    const h = new URLSearchParams(location.hash.slice(1)), proxy = h.get('toss');
+    if (!proxy) return null;
+    history.replaceState(null, '', location.pathname + location.search);
+    if (!/^https?:\/\/[^\s]+$/.test(proxy)) return null;
+    return { proxy:proxy.replace(/\/$/, ''), key:h.get('key') || '' };
+  }
+  const connectLink = readConnectLink();
+
+  function openModal(prefill){
+    const c = QT.Feed.getConfig(), provider = prefill ? 'toss' : c.provider;
+    $('#f-provider').value = provider;
+    fillModal(provider);
+    if (prefill){ $('#f-proxy').value = prefill.proxy; $('#f-token').value = prefill.key; $('#f-ws').value = ''; }
+    $('#link-note').hidden = !prefill;
+    $('#link-note-url').textContent = prefill ? prefill.proxy : '';
     if (NEWS){
       const n = NEWS.getConfig();
       $('#f-news-mode').value = n.mode;
@@ -1162,8 +1179,8 @@
   }
   $('#f-provider').addEventListener('change', function () { fillModal(this.value); });
   function closeModal(){ $('#modal').classList.remove('show'); }
-  $('#settings-btn').addEventListener('click', openModal);
-  $('#connect-btn').addEventListener('click', openModal);
+  $('#settings-btn').addEventListener('click', function () { openModal(); });
+  $('#connect-btn').addEventListener('click', function () { openModal(); });
   $('#m-cancel').addEventListener('click', closeModal);
   $('#modal').addEventListener('click', function (e) { if (e.target === $('#modal')) closeModal(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
@@ -1177,7 +1194,7 @@
     const proxy = $('#f-proxy').value.trim(), token = $('#f-token').value.trim(), ws = $('#f-ws').value.trim();
     QT.Feed.applyConfig(provider === 'kis'
       ? { provider:provider, kis:{ proxyBase:proxy, approvalKey:token, wsUrl:ws } }
-      : { provider:provider, toss:{ proxyBase:proxy, wsUrl:ws } });
+      : { provider:provider, toss:{ proxyBase:proxy, wsUrl:ws, key:token } });
     closeModal();
   });
 
@@ -1236,6 +1253,7 @@
       loadSymbol(true);
       subscribeAll();
       QT.Feed.start();
+      if (connectLink) openModal(connectLink);
       /* 일봉·일정은 뒤늦게 도착 — 도착 시 현재 종목을 다시 그린다 */
       M.onLate(function (kind) {
         if (kind === 'history'){ renderList(); loadSymbol(true); }

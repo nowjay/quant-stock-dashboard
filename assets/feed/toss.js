@@ -7,6 +7,9 @@
        - 웹소켓 handshake 에 Authorization 헤더가 필요한데 브라우저 WebSocket 은 헤더를 못 붙임
        - client_secret 을 브라우저에 두면 페이지를 여는 누구에게나 노출됨
 
+   ● 원격 프록시 (다른 기기에서 보기 — tools/server/setup.sh)
+       https:// 주소 + '프록시 접속 키'. 키는 REST 는 X-Proxy-Key 헤더, 웹소켓은 첫 메시지로 보냅니다.
+
    ● 연결 순서
        1) GET {proxy}/health           토큰 발급 · 허용 IP 점검
        2) GET {proxy}/api/v1/prices    현재가 스냅샷 (웹소켓은 구독 직후 초기값을 주지 않음)
@@ -43,7 +46,7 @@ window.QT = window.QT || {};
 
   function TossFeed(cfg){
     QT.Emitter.call(this);
-    this.cfg = Object.assign({ proxyBase:'', wsUrl:'', pollMs:1000 }, cfg || {});
+    this.cfg = Object.assign({ proxyBase:'', wsUrl:'', key:'', pollMs:1000 }, cfg || {});
     this.codes = [];
     this.bad = {};                   // 토스 종목 마스터에 없는 심볼 (다시 요청하지 않음)
     this.ws = null;
@@ -66,12 +69,17 @@ window.QT = window.QT || {};
   TossFeed.prototype.base = function (){ return (this.cfg.proxyBase || DEFAULT_PROXY).replace(/\/$/, ''); };
   TossFeed.prototype.wsUrl = function (){ return this.cfg.wsUrl || this.base().replace(/^http/, 'ws') + API.ws; };
 
+  TossFeed.prototype.isLocal = function (){ return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(this.base()); };
+
   /* retries: 429(요청 한도 초과)일 때 Retry-After 만큼 기다렸다 다시 시도할 횟수 */
   TossFeed.prototype._get = function (path, retries){
-    const self = this, base = this.base();
-    return fetch(base + path, { headers:{ 'Accept':'application/json' }, credentials:'omit', cache:'no-store' })
+    const self = this, base = this.base(), headers = { 'Accept':'application/json' };
+    if (this.cfg.key) headers['X-Proxy-Key'] = this.cfg.key;
+    return fetch(base + path, { headers:headers, credentials:'omit', cache:'no-store' })
       .catch(function () {
-        throw new Error('프록시(' + base + ')에 연결할 수 없습니다 — .venv/bin/python tools/toss_proxy.py 를 실행하세요');
+        throw new Error('프록시(' + base + ')에 연결할 수 없습니다 — ' + (self.isLocal()
+          ? '.venv/bin/python tools/toss_proxy.py 를 실행하세요'
+          : '서버가 켜져 있는지, 주소가 맞는지 확인하세요'));
       })
       .then(function (r) {
         if (r.status === 429 && retries > 0){
@@ -95,6 +103,9 @@ window.QT = window.QT || {};
     const self = this, gen = this.gen;
     this.closed = false;
     this.emit('status', { mode:'connecting', source:this.name, reason:'프록시 점검 중' });
+    /* HTTPS 페이지(배포본)는 http:// 원격 주소를 부를 수 없다 — localhost 만 예외 */
+    if (location.protocol === 'https:' && /^http:/.test(this.base()) && !this.isLocal())
+      return Promise.reject(new Error('HTTPS 페이지에서는 http:// 프록시에 연결할 수 없습니다 — https:// 주소를 입력하세요'));
     return this._get(API.health)
       .then(function (h) {
         if (!h.ok) throw new Error((h.error && h.error.message) || '프록시가 토스증권에 연결하지 못했습니다');
@@ -125,6 +136,8 @@ window.QT = window.QT || {};
 
       ws.onopen = function (){
         self.lastFrameAt = Date.now();
+        /* 브라우저 WebSocket 은 헤더를 못 붙이므로 접속 키는 첫 메시지로 보낸다 */
+        if (self.cfg.key) ws.send(JSON.stringify({ type:'auth', key:self.cfg.key }));
         self._declare();
         clearInterval(self.pinger);
         self.pinger = setInterval(function () { if (ws.readyState === 1) ws.send('PING'); }, PING_MS);
@@ -154,6 +167,7 @@ window.QT = window.QT || {};
           });
         } else if (f.type === 'error'){
           console.warn('[QT] 토스 웹소켓 오류', f.error);
+          if (f.error && /^proxy-key/.test(f.error.code)) fail(new Error(f.error.message));
         }
       };
       ws.onerror = function (){ fail(new Error('프록시 웹소켓 오류')); };

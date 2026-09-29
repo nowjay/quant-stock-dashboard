@@ -187,7 +187,7 @@ window.QT = window.QT || {};
   function applyTick(code, price, volDelta){
     const st = BY_CODE[code]; if (!st) return;
     const d = daily(code); if (!d.length) return;
-    const last = d[d.length - 1], p = tick(price, st.cur);
+    const last = d[d.length - 1], p = price;          // 실제 체결가는 그대로 (모의 시세는 생성 시 호가 단위로 맞춤)
     last.c = p; last.h = Math.max(last.h, p); last.l = Math.min(last.l, p);
     last.v += Math.max(0, Math.round(volDelta || 0));
     const q = QUOTES[code];

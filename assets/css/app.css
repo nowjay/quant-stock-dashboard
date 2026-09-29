@@ -260,6 +260,8 @@ input{font-family:inherit}
   font-size:11.5px;line-height:1.55;margin-bottom:14px;
 }
 .warn [data-lucide]{flex:none;width:15px;height:15px;margin-top:1px}
+.warn a{color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+#link-note-url{word-break:break-all}
 .modal .row{display:flex;gap:8px;margin-top:4px}
 .modal .row button{flex:1;height:42px;border-radius:12px;font-weight:700;font-size:13.5px}
 .modal .row .primary{background:var(--blue);color:#fff}

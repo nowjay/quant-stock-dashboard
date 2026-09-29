@@ -20,19 +20,27 @@ toss_proxy.py — 토스증권 Open API 로컬 프록시
   TOSS_CLIENT_SECRET=...
   TOSS_PROXY_PORT=8778                   (선택)
   TOSS_ALLOWED_ORIGINS=https://a.b.c     (선택, 콤마 구분 — 기본은 localhost 페이지만 허용)
+  TOSS_PROXY_KEY=...                     (원격 접속 시 필수 — 브라우저 설정의 '프록시 접속 키')
+
+원격 서버(다른 기기에서 접속)
+  tools/server/setup.sh 가 Caddy(HTTPS) 뒤에 이 프록시를 띄우고 접속 키를 만들어 줍니다.
+  접속 키가 있으면 REST 는 X-Proxy-Key 헤더, 웹소켓은 첫 메시지 {"type":"auth","key":...} 로 확인합니다.
 
 안전장치
-  · 127.0.0.1 에만 바인딩 — 이 PC 에서만 접근 가능
+  · 127.0.0.1 에만 바인딩 — 외부 공개는 앞단의 HTTPS 리버스 프록시(Caddy)를 거쳐서만
   · 허용 Origin(기본 localhost)만 CORS·웹소켓 허용 — 다른 사이트가 몰래 붙지 못하게
+  · 리버스 프록시를 거친 요청이나 허용 Origin 을 추가한 경우 접속 키 없이는 동작하지 않음
   · 주문·계좌 API 는 중계하지 않음 (시세·종목·시장 정보 GET 만)
   · 업스트림 웹소켓은 1개만 열고 여러 탭에 나눠 전달 (계정당 동시 연결 2개 제한)
 """
 import asyncio
 import errno
+import hmac
 import json
 import os
 import random
 import re
+import secrets
 import ssl
 import sys
 import time
@@ -75,6 +83,7 @@ WS_URL = os.environ.get('TOSS_WS_URL', 'wss://openapi-ws.tossinvest.com/ws/v1')
 HOST = '127.0.0.1'
 PORT = int(os.environ.get('TOSS_PROXY_PORT', '8778'))
 EXTRA_ORIGINS = {o.strip().rstrip('/') for o in os.environ.get('TOSS_ALLOWED_ORIGINS', '').split(',') if o.strip()}
+PROXY_KEY = os.environ.get('TOSS_PROXY_KEY', '').strip()
 LOCAL_ORIGIN = re.compile(r'^http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$')
 
 # 중계하는 REST 경로 — 시세·종목·시장 정보 GET 만 (계좌·자산·주문·조건주문은 제외)
@@ -119,6 +128,22 @@ def describe(e):
 
 def origin_allowed(origin):
     return bool(LOCAL_ORIGIN.match(origin)) or origin.rstrip('/') in EXTRA_ORIGINS
+
+
+def key_ok(given):
+    return bool(PROXY_KEY) and isinstance(given, str) and hmac.compare_digest(given.encode(), PROXY_KEY.encode())
+
+
+def key_error(request):
+    """접속 키 검사. 원격(리버스 프록시 경유) 요청인데 키가 설정되지 않았으면 그 자체로 거부한다."""
+    if not PROXY_KEY:
+        if request.headers.get('X-Forwarded-For'):
+            return error_json(403, 'proxy-key-not-configured',
+                              '원격 접속에는 서버 .env 의 TOSS_PROXY_KEY 가 필요합니다.')
+        return None
+    if key_ok(request.headers.get('X-Proxy-Key')):
+        return None
+    return error_json(401, 'proxy-key-invalid', '프록시 접속 키가 없거나 틀렸습니다 — 연결 설정의 \'프록시 접속 키\'를 확인하세요.')
 
 
 # =============================================================
@@ -231,8 +256,15 @@ class Hub:
 
     # ---------- 브라우저 쪽 ----------
     async def handle(self, request):
+        if not PROXY_KEY and request.headers.get('X-Forwarded-For'):
+            return error_json(403, 'proxy-key-not-configured', '원격 접속에는 서버 .env 의 TOSS_PROXY_KEY 가 필요합니다.')
         ws = web.WebSocketResponse()
         await ws.prepare(request)
+        if PROXY_KEY and not await self._authenticate(ws):
+            await self._send(ws, {'type': 'error', 'error': {
+                'code': 'proxy-key-invalid', 'message': '프록시 접속 키가 없거나 틀렸습니다 — 연결 설정의 \'프록시 접속 키\'를 확인하세요.'}})
+            await ws.close(code=4401, message=b'proxy key required')
+            return ws
         self.clients[ws] = set()
         self._ensure_upstream()
         await self._send(ws, self._status_frame())
@@ -244,6 +276,8 @@ class Hub:
                 if text == 'PING':
                     await ws.send_str('{"type":"pong"}')
                     continue
+                if text.startswith('{') and '"auth"' in text:
+                    continue                                # 키가 필요 없는 프록시에 보낸 인증 메시지
                 topics, err = parse_declaration(text)
                 if err:
                     await self._send(ws, {'type': 'error', 'error': err})
@@ -257,6 +291,15 @@ class Hub:
             else:
                 self._schedule_idle_close()
         return ws
+
+    async def _authenticate(self, ws):
+        """브라우저 WebSocket 은 헤더를 못 붙이므로 첫 메시지 {"type":"auth","key":...} 로 확인한다."""
+        try:
+            msg = await ws.receive(timeout=5)
+            frame = json.loads(msg.data) if msg.type == aiohttp.WSMsgType.TEXT else None
+        except (asyncio.TimeoutError, ValueError):
+            return False
+        return isinstance(frame, dict) and frame.get('type') == 'auth' and key_ok(frame.get('key'))
 
     async def _send(self, ws, obj):
         await self._send_raw(ws, json.dumps(obj, ensure_ascii=False))
@@ -431,6 +474,9 @@ class TossProxy:
                                         timeout=aiohttp.ClientTimeout(total=15)) as r:
                 body = await r.read()
                 if r.status == 401 and attempt == 1 and error_code(body) in RETRY_TOKEN_CODES:
+                    if error_code(body) == 'token-revoked':
+                        log('토큰이 무효화됐습니다 — 다른 곳(다른 PC·서버의 프록시)에서 같은 키로 토큰을 발급한 것 같습니다. '
+                            '토큰은 클라이언트당 1개라 프록시는 한 곳에서만 실행하세요.')
                     token = await self.tokens.get(stale=token)
                     continue
                 return r.status, body, r.headers
@@ -474,14 +520,18 @@ class TossProxy:
         if origin and not origin_allowed(origin):
             return error_json(403, 'origin-not-allowed',
                               f'허용되지 않은 Origin: {origin} — 필요하면 .env 의 TOSS_ALLOWED_ORIGINS 에 추가하세요.')
-        resp = web.Response(status=204) if request.method == 'OPTIONS' else await handler(request)
+        if request.method == 'OPTIONS':
+            resp = web.Response(status=204)
+        else:
+            denied = None if request.path == '/ws' else key_error(request)   # 웹소켓은 handle 에서 확인
+            resp = denied or await handler(request)
         if origin and not resp.prepared:
             resp.headers['Access-Control-Allow-Origin'] = origin
             resp.headers['Vary'] = 'Origin'
             resp.headers['Access-Control-Expose-Headers'] = ', '.join(PASS_HEADERS)
             if request.method == 'OPTIONS':
                 resp.headers['Access-Control-Allow-Methods'] = 'GET'
-                resp.headers['Access-Control-Allow-Headers'] = 'Accept, Content-Type'
+                resp.headers['Access-Control-Allow-Headers'] = 'Accept, Content-Type, X-Proxy-Key'
                 resp.headers['Access-Control-Allow-Private-Network'] = 'true'
                 resp.headers['Access-Control-Max-Age'] = '600'
         return resp
@@ -522,12 +572,16 @@ class TossProxy:
 
 
 def main():
+    if EXTRA_ORIGINS and not PROXY_KEY:
+        sys.exit('TOSS_ALLOWED_ORIGINS 로 다른 사이트를 허용하려면 접속 키가 필요합니다. .env 에 아래 줄을 추가하세요:\n'
+                 f'  TOSS_PROXY_KEY={secrets.token_urlsafe(32)}')
     base = f'http://{HOST}:{PORT}'
     print(f'토스증권 Open API 프록시 — {base}')
     print(f'  REST  {base}/api/v1/prices?symbols=005930')
     print(f'  WS    ws://{HOST}:{PORT}/ws')
     print(f'  상태  {base}/health')
     print(f'  허용 Origin: localhost' + (', ' + ', '.join(sorted(EXTRA_ORIGINS)) if EXTRA_ORIGINS else ''))
+    print(f'  접속 키: {"사용 (X-Proxy-Key)" if PROXY_KEY else "없음 — 이 PC 에서만 사용"}')
     if REST_BASE != 'https://openapi.tossinvest.com':
         print(f'  ⚠️ 업스트림 재지정: {REST_BASE} / {WS_URL}')
     print('종료: Ctrl+C', flush=True)
