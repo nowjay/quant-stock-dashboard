@@ -200,6 +200,12 @@ window.QT = window.QT || {};
       if (out.day > last[0]) h.push([out.day, out.p]);
       else if (out.day === last[0]) h[h.length - 1] = [last[0], out.p];
     }
+    /* CNBC 는 장 시작 전후로 '대비'를 0 으로 비워 두고 전일 종가만 내려주는 때가 있다 (코스피 0.00% 표시).
+       시세 날짜의 봉이 일봉에 있으면 그 전 거래일 종가로 다시 계산한다 */
+    if (!out.d && out.p != null && out.day && h.length >= 2 && h[h.length - 1][0] === out.day){
+      const prev = h[h.length - 2][1];
+      if (prev && prev !== out.p){ out.d = out.p - prev; out.r = out.d / prev * 100; }
+    }
     return out;
   }
   function list(group){

@@ -148,19 +148,21 @@ window.QT = window.QT || {};
     return out;
   }
 
-  /* ---------- 집계 ---------- */
+  /* ---------- 집계 ----------
+     일봉은 UTC 날짜가 곧 거래일이라(아래 '거래일' 규칙) 주 · 월 구분도 UTC 로 해야
+     한국 밖에서 열어도 같은 주봉 · 월봉이 나온다. te = 묶인 마지막 봉 시각 (주봉 기간 표시용) */
   function bucketKey(t, tf){
-    const d = new Date(t);
     if (tf === '5m') return Math.floor(t / 300000);
-    if (tf === '1W'){ const w = new Date(d); w.setDate(w.getDate() - ((w.getDay() + 6) % 7)); return w.getFullYear() + '-' + w.getMonth() + '-' + w.getDate(); }
-    return d.getFullYear() + '-' + d.getMonth();
+    const d = new Date(t);
+    if (tf === '1W') return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 86400000) - (d.getUTCDay() + 6) % 7;
+    return d.getUTCFullYear() * 12 + d.getUTCMonth();
   }
   function aggregate(bars, tf){
     const out = []; let cur = null, key = null;
     for (let i = 0; i < bars.length; i++){
       const b = bars[i], k = bucketKey(b.t, tf);
-      if (k !== key){ if (cur) out.push(cur); cur = { t:b.t, o:b.o, h:b.h, l:b.l, c:b.c, v:b.v }; key = k; }
-      else { cur.h = Math.max(cur.h, b.h); cur.l = Math.min(cur.l, b.l); cur.c = b.c; cur.v += b.v; }
+      if (k !== key){ if (cur) out.push(cur); cur = { t:b.t, te:b.t, o:b.o, h:b.h, l:b.l, c:b.c, v:b.v }; key = k; }
+      else { cur.h = Math.max(cur.h, b.h); cur.l = Math.min(cur.l, b.l); cur.c = b.c; cur.v += b.v; cur.te = b.t; }
     }
     if (cur) out.push(cur);
     return out;
@@ -347,16 +349,24 @@ window.QT = window.QT || {};
   function minuteSource(code){ return MIN_SRC[code] || null; }
 
   /* 목록 렌더링용 경량 시세 — 히스토리를 만들지 않고 수집된 종가만 사용 */
-  function lightQuote(code){
-    if (DAILY[code]) return snapshot(code);
+  function quoteOnly(code){
     const st = BY_CODE[code], q = QUOTES[code];
     if (!st) return null;
     if (!q) return { st:st, code:code, price:null, diff:0, rate:0, volume:0, spark:null, real:isReal(code) };
+    const it = KRX.items[code];
     return { st:st, code:code, price:q.p, prevClose:q.p - (q.d || 0), diff:q.d || 0, rate:q.r || 0,
+             open: it && it.o, high: it && it.h, low: it && it.l,
              volume:q.v || 0, spark:null, real:isReal(code) };
+  }
+  function lightQuote(code){
+    if (DAILY[code] && !needsDaily(code)) return snapshot(code);
+    return quoteOnly(code);
   }
 
   function snapshot(code){
+    /* 공공데이터 일봉을 받기 전에는 시뮬레이션 경로로 대비 · 스파크라인을 만들지 않는다
+       (관심종목에 가짜 등락률이 뜨던 문제) — 거래소 공식 종가 · 대비만 쓴다 */
+    if (needsDaily(code)) return quoteOnly(code);
     const st = BY_CODE[code], d = daily(code);
     if (!st || !d.length) return null;
     const last = d[d.length - 1], prev = d[d.length - 2] || last;

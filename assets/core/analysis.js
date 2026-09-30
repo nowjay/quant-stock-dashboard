@@ -49,7 +49,8 @@ window.QT = window.QT || {};
     /* ---------- 방향성 점수 ---------- */
     const atrV = at(ind.atr) || (price * 0.02);
     const atrPct = atrV / price * 100;
-    const hi52 = hi(bars, 252, 'h'), lo52 = lo(bars, 252, 'l');
+    const y52 = n - I.yearStart(bars);
+    const hi52 = hi(bars, y52, 'h'), lo52 = lo(bars, y52, 'l');
     const hi20 = hi(bars, 20, 'h'), lo20 = lo(bars, 20, 'l');
 
     let shortScore = 0;

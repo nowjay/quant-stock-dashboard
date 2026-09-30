@@ -86,6 +86,25 @@ window.QT = window.QT || {};
     else dps = last((f.hist || {}).dps) != null ? last(f.hist.dps) : lastActual(A, 'dps');
     return { epsTTM:epsTTM, bps:bps, epsFwd:epsFwd, fwdLabel:fwdLabel, dps:dps };
   }
+  /* 최근 4분기 EBITDA ≈ 최근 4개 분기 영업이익 합 + 직전 연도 감가상각비(연간 EBITDA − 연간 영업이익).
+     연간 EBITDA 를 그대로 쓰면 이익이 급변하는 구간에서 PER(최근 4분기)과 기준 시점이 어긋나
+     예: 영업이익이 4배로 늘어난 해에 EV/EBITDA 가 PER 보다 높게 나와 '고평가'로 잘못 표시된다 */
+  function ebitdaTTM(f){
+    const Q = f.quarter || {}, A = f.annual || {}, H = f.hist || {};
+    const qi = actualIdx(Q).filter(function (i) { return fin((Q.op || [])[i]); });
+    if (qi.length < 4) return null;
+    const op4 = qi.slice(-4).reduce(function (s, i) { return s + Q.op[i]; }, 0);
+    const hp = H.p || [], he = H.ebitda || [];
+    for (let j = hp.length - 1; j >= 0; j--){
+      if (!fin(he[j])) continue;
+      const ai = (A.p || []).indexOf(hp[j]);
+      const op = ai >= 0 && !(A.e || [])[ai] ? (A.op || [])[ai] : null;
+      if (!fin(op)) return null;
+      const da = he[j] - op;
+      return da >= 0 ? op4 + da : null;
+    }
+    return null;
+  }
   function roeTTM(f, ps){
     if (fin(ps.epsTTM) && fin(ps.bps) && ps.bps > 0) return ps.epsTTM / ps.bps * 100;
     return lastActual(f.annual, 'roe');
@@ -521,7 +540,8 @@ window.QT = window.QT || {};
       } else {
         const ndr = last(H.netDebt);
         if (fin(ndr) && fin(ps.bps)) nd = ndr / 100 * ps.bps * f.shares;
-        ebitda = last(H.ebitda);
+        ebitda = ebitdaTTM(f);
+        if (!fin(ebitda)) ebitda = last(H.ebitda);
       }
       if (fin(ebitda) && ebitda > 0) v.evEbitda = (price * f.shares + (nd || 0)) / (ebitda * mul);
       v.mcap = price * f.shares / mul;

@@ -205,6 +205,32 @@ input{font-family:inherit}
   font-variant-numeric:tabular-nums;
 }
 .chart-legend .k{color:var(--muted);margin-right:4px;font-size:11px}
+/* 레전드 맨 앞 날짜 칩 — 마우스를 올린 봉의 날짜(없으면 최신 봉) */
+.chart-legend .lg-d{
+  display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 7px;border-radius:7px;
+  background:var(--hair);color:var(--ink);font-weight:700;letter-spacing:-.01em;white-space:nowrap;
+}
+.chart-legend .lg-d svg{color:var(--muted);flex:none}
+.chart-legend .lg-d em{font-style:normal;font-size:10.5px;font-weight:700;color:var(--muted);margin-left:2px}
+.chart-legend .lg-d.on{background:var(--ink);color:#fff}
+.chart-legend .lg-d.on svg{color:#fff}
+
+/* 캔들 위 날짜 툴팁 */
+.chart-tip{
+  position:absolute;left:0;top:0;z-index:5;min-width:172px;padding:9px 11px 10px;border-radius:12px;
+  background:rgba(255,255,255,.97);border:1px solid var(--line);box-shadow:var(--shadow-md);
+  font-size:11.5px;color:var(--ink-2);pointer-events:none;will-change:transform;
+}
+.chart-tip .ct-d{display:flex;align-items:center;gap:8px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--hair)}
+.chart-tip .ct-d b{font-size:12.5px;font-weight:800;color:var(--ink);letter-spacing:-.02em;white-space:nowrap}
+.chart-tip .ct-d em{margin-left:auto;font-style:normal;font-size:10px;font-weight:700;color:var(--muted);background:var(--hair);border-radius:5px;padding:1px 5px}
+.chart-tip .ct-g{display:grid;grid-template-columns:auto auto;column-gap:14px;row-gap:2px}
+.chart-tip .ct-g span{color:var(--muted)}
+.chart-tip .ct-g b{text-align:right;font-weight:700;color:var(--ink);white-space:nowrap}
+.chart-tip .ct-g b.up{color:var(--up)} .chart-tip .ct-g b.down{color:var(--down)}
+.chart-tip .ct-i{display:flex;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--hair);font-weight:600}
+.chart-tip .ct-i b{font-weight:700}
+@media (hover:none){ .chart-tip{min-width:156px;font-size:11px} }
 .lib-fallback{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8}
 
 /* ---------- 분석 패널 ---------- */
@@ -348,6 +374,8 @@ input{font-family:inherit}
 
 /* 통화 · 데이터 출처 */
 .quote .fxline{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:3px}
+.quote .asof{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px}
+.quote .asof:empty{display:none}
 .chip.src{background:var(--blue-weak);color:var(--blue-ink)}
 .chip.src[data-kind="sim"]{background:var(--amber-weak);color:#B54708}
 .wl-row .sub-krw{font-size:10.5px;color:var(--faint);font-variant-numeric:tabular-nums;text-align:right;margin-top:1px}
@@ -831,6 +859,7 @@ body[data-view="stock"] .home{display:none}
 }
 .tk-card:hover{background:var(--hair)}
 .tk-n{grid-column:1/-1;font-size:11.5px;font-weight:700;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-n em{font-style:normal;font-size:10px;font-weight:700;color:#B54708;background:var(--amber-weak);border-radius:5px;padding:0 5px;margin-left:5px}
 .tk-p{grid-column:1;font-size:15.5px;font-weight:800;letter-spacing:-.035em;white-space:nowrap;margin-top:1px}
 .tk-c{grid-column:1;display:flex;gap:5px;font-size:11px;font-weight:700;white-space:nowrap}
 .tk-c em{font-style:normal;opacity:.9}

@@ -87,7 +87,7 @@ window.QT = window.QT || {};
 
   /* ---------- 파동 구조 (52주 주파동 + 현재 진행 파동) ---------- */
   function waveOf(bars, price){
-    const n = bars.length, yr = range(bars, n - 252, n), A = yr.h - yr.l;
+    const n = bars.length, yr = range(bars, QT.Indicators.yearStart(bars), n), A = yr.h - yr.l;
     if (!(A > 0)) return null;
     const w = { hi52:yr.h, lo52:yr.l, amp:A, levels:[] };
     function lv(v, label, w8){ if (fin(v) && v > 0) w.levels.push({ v:v, label:label, w:w8 }); }
@@ -343,7 +343,7 @@ window.QT = window.QT || {};
     if (fin(d.ma20)){
       const cross = I.lastCross(ind.close, ind.sma20, 15);
       const gap = pctOf(price, d.ma20);
-      const agoTxt = cross ? (cross.ago === 0 ? '오늘' : cross.ago + '봉 전') : '';
+      const agoTxt = cross ? (cross.ago === 0 ? '최근 봉' : cross.ago + '봉 전') : '';
       const sb = t.short.base;
       const open = (sb.anchored ? '<b>' + sb.basis + '</b>인 ' : '변동성 기준 기대 도달가인 ') + fmt(sb.v) + '까지 상방이 열려 있습니다.';
       if (price >= d.ma20){
