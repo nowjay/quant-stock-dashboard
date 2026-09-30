@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 공공데이터포털 '금융위원회_주식시세정보' 일봉 수집기 (배포본의 국내 차트 · 분석 데이터)
-  · 주식 : GetStockSecuritiesInfoService/getStockPriceInfo   (KOSPI · KOSDAQ 전 종목)
-  · ETF  : GetSecuritiesProductInfoService/getETFPriceInfo   ('금융위원회_증권상품시세정보' 활용신청 시에만)
+  · 주식 : GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2   (KOSPI · KOSDAQ 전 종목)
+  · ETF  : GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2   ('금융위원회_증권상품시세정보' 활용신청 시에만)
+  · 지금 신청한 키는 V2 주소에만 등록됩니다. 예전에 받은 키를 위해 V1 주소도 차례로 시도합니다.
   · 영업일 다음 날 오후 1시 이후에 전날 시세가 올라옵니다(T+1). 당일 시세는 토스증권 실시간 연결로 채웁니다.
 
 동작
@@ -28,10 +29,13 @@ OUT = os.path.join(ROOT, 'assets', 'data', 'krx')
 CACHE = os.environ.get('KRX_CACHE') or os.path.join(ROOT, '.cache', 'krx')
 KST = timezone(timedelta(hours=9))
 
-API = {
-    'stock': 'https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo',
-    'etf':   'https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETFPriceInfo',
+API = {                                                  # 앞에서부터 시도 (V2 → V1)
+    'stock': ['https://apis.data.go.kr/1160100/GetStockSecuritiesInfoService_V2/getStockPriceInfo_V2',
+              'https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo'],
+    'etf':   ['https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2',
+              'https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETFPriceInfo'],
 }
+ENDPOINT = {}                                            # 키가 등록된 주소 (resolve 가 정함)
 WEEKDAYS = int(os.environ.get('KRX_WEEKDAYS', '520'))   # 약 2년 — 차트 기본 보기 · 200일선 · 백테스트
 FIRST_DAY = '20200102'                                   # API 제공 시작
 RECENT_DAYS = 10                                         # 이 기간의 빈 날짜는 '아직 미게시'일 수 있어 다시 조회
@@ -69,7 +73,7 @@ def service_key():
 def call(kind, key, params, tries=4):
     """curl 로 호출 — 서비스키가 프로세스 목록에 보이지 않도록 주소는 표준입력(-K -)으로 넘긴다."""
     qs = '&'.join('%s=%s' % (k, quote(str(v), safe='')) for k, v in params.items())
-    url = '%s?serviceKey=%s&resultType=json&%s' % (API[kind], key, qs)
+    url = '%s?serviceKey=%s&resultType=json&%s' % (ENDPOINT.get(kind) or API[kind][0], key, qs)
     last = None
     for i in range(tries):
         try:
@@ -121,6 +125,23 @@ def num(s):
         return float(str(s).replace(',', ''))
     except ValueError:
         return None
+
+
+def resolve(kind, key, day):
+    """키가 등록된 주소를 찾는다 — '미등록 키(30)' · '접근 거부(20)'면 다음 주소로."""
+    last = None
+    for url in API[kind]:
+        ENDPOINT[kind] = url
+        try:
+            call(kind, key, {'basDt': day, 'numOfRows': 1, 'pageNo': 1}, tries=2)
+            print('  %s: %s' % (kind, url.split('/1160100/')[1]))
+            return url
+        except ApiError as e:
+            last = e
+            if e.code not in ('20', '30'):
+                raise
+    ENDPOINT.pop(kind, None)
+    raise last
 
 
 def fetch_day(kind, key, day):
@@ -223,7 +244,8 @@ def sync(kind, key, days):
             print('    %s %d / %d' % (kind, done[0], len(todo)))
         return d, rows, None
 
-    # 첫 날짜로 키 · 활용신청 여부를 먼저 확인
+    # 키가 등록된 주소(V2/V1)를 찾고, 첫 날짜로 키 · 활용신청 여부를 확인
+    resolve(kind, key, todo[0])
     d, rows, err = job(todo[0])
     if err is not None and err.code in FATAL:
         raise err
