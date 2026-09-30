@@ -251,6 +251,12 @@ def collect_items(old):
         elif hist and day and day == hist[-1][0]:
             hist[-1][1] = q['p']
         hist = hist[-HIST_DAYS:]
+        # CNBC 는 장 시작 전후로 대비를 0 으로 비워 두고 전일 종가만 주는 때가 있다(코스피 0.00%).
+        # 시세 날짜의 봉이 일봉에 있으면 그 전 거래일 종가로 다시 계산한다.
+        if not q.get('d') and day and len(hist) >= 2 and hist[-1][0] == day:
+            prev = hist[-2][1]
+            if prev and prev != q['p']:
+                q = dict(q, d=q['p'] - prev, r=(q['p'] - prev) / prev * 100)
         items[key] = {
             'p': r4(q['p']), 'd': r4(q.get('d')), 'r': round(q['r'], 3) if q.get('r') is not None else None,
             't': q.get('t'), 'src': src, 'h': [[d, r4(c)] for d, c in hist],

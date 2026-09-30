@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20260929k">
+<link rel="stylesheet" href="assets/css/app.css?v=20260930a">
 </head>
 <body data-view="home">
 <script>/* 마지막으로 본 화면을 먼저 적용해 깜빡임을 막는다 (app.js 의 VIEW_KEY) */
@@ -148,6 +148,7 @@
           <div class="now num" id="q-price">—</div>
           <div class="fxline num" id="q-fx" hidden></div>
           <div class="dt num" id="q-delta">—</div>
+          <div class="asof" id="q-asof"></div>
         </div>
       </div>
       <div class="stats">
@@ -200,6 +201,7 @@
           <div class="live-tag" id="live-tag" data-mode="connecting">
             <span class="led"></span><b id="live-tag-text">연결 중</b><em id="live-tag-time">--:--:--</em>
           </div>
+          <div class="chart-tip" id="chart-tip" role="status" aria-live="off" hidden></div>
         </div>
         <div class="pane" id="pane-rsi"><div class="pane-tag" id="tag-rsi">RSI (14)</div></div>
         <div class="pane" id="pane-macd"><div class="pane-tag" id="tag-macd">MACD (12, 26, 9)</div></div>
@@ -418,27 +420,27 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20260929k"></script>
-<script src="assets/core/search.js?v=20260929k"></script>
-<script src="assets/core/events.js?v=20260929k"></script>
-<script src="assets/core/markets.js?v=20260929k"></script>
-<script src="assets/core/market-data.js?v=20260929k"></script>
-<script src="assets/core/indicators.js?v=20260929k"></script>
-<script src="assets/core/scoring.js?v=20260929k"></script>
-<script src="assets/core/patterns.js?v=20260929k"></script>
-<script src="assets/core/targets.js?v=20260929k"></script>
-<script src="assets/core/analysis.js?v=20260929k"></script>
-<script src="assets/core/backtest.js?v=20260929k"></script>
-<script src="assets/core/fundamentals.js?v=20260929k"></script>
-<script src="assets/core/signal.js?v=20260929k"></script>
-<script src="assets/core/news.js?v=20260929k"></script>
-<script src="assets/feed/mock.js?v=20260929k"></script>
-<script src="assets/feed/kis.js?v=20260929k"></script>
-<script src="assets/feed/toss.js?v=20260929k"></script>
-<script src="assets/feed/index.js?v=20260929k"></script>
-<script src="assets/home.js?v=20260929k"></script>
-<script src="assets/value.js?v=20260929k"></script>
-<script src="assets/screener.js?v=20260929k"></script>
-<script src="assets/app.js?v=20260929k"></script>
+<script src="assets/core/fx.js?v=20260930a"></script>
+<script src="assets/core/search.js?v=20260930a"></script>
+<script src="assets/core/events.js?v=20260930a"></script>
+<script src="assets/core/markets.js?v=20260930a"></script>
+<script src="assets/core/market-data.js?v=20260930a"></script>
+<script src="assets/core/indicators.js?v=20260930a"></script>
+<script src="assets/core/scoring.js?v=20260930a"></script>
+<script src="assets/core/patterns.js?v=20260930a"></script>
+<script src="assets/core/targets.js?v=20260930a"></script>
+<script src="assets/core/analysis.js?v=20260930a"></script>
+<script src="assets/core/backtest.js?v=20260930a"></script>
+<script src="assets/core/fundamentals.js?v=20260930a"></script>
+<script src="assets/core/signal.js?v=20260930a"></script>
+<script src="assets/core/news.js?v=20260930a"></script>
+<script src="assets/feed/mock.js?v=20260930a"></script>
+<script src="assets/feed/kis.js?v=20260930a"></script>
+<script src="assets/feed/toss.js?v=20260930a"></script>
+<script src="assets/feed/index.js?v=20260930a"></script>
+<script src="assets/home.js?v=20260930a"></script>
+<script src="assets/value.js?v=20260930a"></script>
+<script src="assets/screener.js?v=20260930a"></script>
+<script src="assets/app.js?v=20260930a"></script>
 </body>
 </html>

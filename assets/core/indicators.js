@@ -88,11 +88,11 @@ window.QT = window.QT || {};
     }
     return out;
   }
-  function atr(bars, p){
+  function atr(bars, p){                                // Wilder ATR (RMA) — 증권사 · 트레이딩뷰 ATR(14)와 같은 정의
     const tr = bars.map(function (b, i) {
       return i === 0 ? b.h - b.l : Math.max(b.h - b.l, Math.abs(b.h - bars[i-1].c), Math.abs(b.l - bars[i-1].c));
     });
-    return ema(tr, p);
+    return rma(tr, p);
   }
   /* Wilder 평활 (RMA) — 첫 값은 p개 단순평균 */
   function rma(a, p, from){
@@ -159,6 +159,16 @@ window.QT = window.QT || {};
     }
     return null;
   }
+  /* 52주(달력 365일) 구간이 시작하는 인덱스 — 봉 개수 252개로 자르면 휴장일이 많은 국내 종목은
+     1년보다 한 달 가까이 더 거슬러 올라가 52주 최고 · 최저가 틀어진다 (일 · 주 · 월봉 모두 사용 가능) */
+  function yearStart(bars){
+    const n = bars.length;
+    if (!n) return 0;
+    const from = bars[n - 1].t - 365 * 86400000;
+    let i = n - 1;
+    while (i > 0 && bars[i - 1].t > from) i--;
+    return i;
+  }
   function set(bars){
     const c = bars.map(function (b) { return b.c; });
     const bb = bollinger(c, 20, 2), md = macd(c, 12, 26, 9), dm = adx(bars, 14);
@@ -175,5 +185,6 @@ window.QT = window.QT || {};
   }
 
   QT.Indicators = { sma:sma, ema:ema, bollinger:bollinger, rsi:rsi, macd:macd,
-    stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, adx:adx, obv:obv, mfi:mfi, lastCross:lastCross, set:set };
+    stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, adx:adx, obv:obv, mfi:mfi, lastCross:lastCross,
+    yearStart:yearStart, set:set };
 })(window.QT);

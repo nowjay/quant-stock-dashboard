@@ -82,6 +82,20 @@ window.QT = window.QT || {};
     return out;
   }
 
+  /* 시장 현지 날짜 (yyyymmdd 정수) */
+  const MKT_TZ = { kr:'Asia/Seoul', us:'America/New_York', asia:'Asia/Seoul' };
+  const DFMT = {};
+  function todayIn(tz){
+    const f = DFMT[tz] || (DFMT[tz] = new Intl.DateTimeFormat('en-CA', { timeZone:tz, year:'numeric', month:'2-digit', day:'2-digit' }));
+    return +f.format(new Date()).replace(/\D/g, '');
+  }
+  /* 장중인데 시세 날짜가 오늘이 아니면 — 실시간 시세를 못 받아 직전 거래일 값을 보여 주는 중.
+     '장중' 표시 옆 숫자를 오늘 등락으로 오해하지 않도록 날짜를 붙인다 */
+  function staleOpen(it, group){
+    const ss = MK.session(group);
+    return !!(ss && ss.s === 'open' && it && it.day && it.day < todayIn(MKT_TZ[group]));
+  }
+
   /* ---------------- ① 글로벌 지수 전광판 ---------------- */
   const TK_GROUPS = [['kr', '국내'], ['us', '미국'], ['asia', '아시아']];
   function statusText(){
@@ -94,11 +108,12 @@ window.QT = window.QT || {};
     if (s.mode === 'error') return '<span class="led"></span>시세 연결 실패';
     return '<span class="led"></span>불러오는 중…';
   }
-  function tkCard(it){
+  function tkCard(it, group){
     const c = chgParts(it), vals = it.h.slice(-23).map(function (x) { return x[1]; });
     const when = it.t ? hm(it.t) : it.day ? mdOf(it.day) + ' 종가' : '';
+    const stale = staleOpen(it, group);
     return '<button type="button" class="tk-card" data-k="' + it.k + '" title="' + esc(it.n) + (when ? ' · ' + when : '') + ' — 추세 보기">' +
-      '<span class="tk-n">' + it.n + '</span>' +
+      '<span class="tk-n">' + it.n + (stale ? '<em>' + mdOf(it.day) + ' 종가</em>' : '') + '</span>' +
       '<b class="tk-p num">' + valText(it, it.p) + '</b>' +
       '<span class="tk-c num ' + cls(it.d) + '"><span>' + c.a + '</span>' + (c.b ? '<em>' + c.b + '</em>' : '') + '</span>' +
       spark(vals, it.d, 64, 26) +
@@ -113,7 +128,7 @@ window.QT = window.QT || {};
       if (!items.length) return;
       const ss = MK.session(g[0]);
       html += '<div class="tk-grp"><b>' + g[1] + '</b>' + (ss ? '<em data-s="' + ss.s + '">' + ss.label + '</em>' : '') + '</div>' +
-        items.map(tkCard).join('');
+        items.map(function (it) { return tkCard(it, g[0]); }).join('');
     });
     el.innerHTML = html || '<div class="tk-empty">' + (MK.status.mode === 'error' ? '시장 데이터를 불러오지 못했습니다.' : '시장 데이터를 불러오는 중…') + '</div>';
     const meta = $('#tk-meta');
@@ -143,14 +158,17 @@ window.QT = window.QT || {};
     if (spx && ixic){
       const avg = (spx.r + ixic.r) / 2;
       const word = avg > 0.3 ? '상승' : avg < -0.3 ? '하락' : '보합권';
-      parts.push(us && us.s === 'open'
+      parts.push(us && us.s === 'open' && !staleOpen(ixic, 'us')
         ? '미국 증시는 장중 ' + word + ' 흐름입니다 ' + chip(ixic) + chip(spx) + '.'
         : '미국 증시는 ' + word + ' 마감했습니다 ' + chip(ixic) + chip(spx) + (nq ? ' · 선물 ' + chip(nq, '나스닥100') : '') + '.');
     }
     const ks = g('KOSPI'), kq = g('KOSDAQ');
     if (ks && kq){
       const word = ks.r > 0.3 ? '강세' : ks.r < -0.3 ? '약세' : '보합';
-      parts.push('코스피는 ' + (kr && kr.s === 'open' ? '장중 ' : kr && kr.s === 'pre' ? '개장 전, 직전 거래일 ' : '') + word + '입니다 ' + chip(ks) + chip(kq) + '.');
+      if (staleOpen(ks, 'kr'))
+        parts.push('코스피는 직전 거래일(' + mdOf(ks.day) + ') ' + (word === '보합' ? '보합으로' : word + '로') + ' 마감했습니다 ' + chip(ks) + chip(kq) +
+          ' — 오늘 장중 시세는 아직 반영되지 않았습니다.');
+      else parts.push('코스피는 ' + (kr && kr.s === 'open' ? '장중 ' : kr && kr.s === 'pre' ? '개장 전, 직전 거래일 ' : '') + word + '입니다 ' + chip(ks) + chip(kq) + '.');
     }
     const fx = g('USDKRW');
     if (fx) parts.push('원/달러 <b class="num">' + fnum(fx.p, 1) + '원</b><span class="' + cls(fx.d) + '"> (' + sign(fx.d, 1) + ')</span>.');
