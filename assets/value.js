@@ -498,6 +498,7 @@ window.QT = window.QT || {};
   }
   function techOf(code, a){
     if (!a || !a.daily || !M.isReal(code)) return null;
+    if (a.quality && a.quality.level === 'low') return null;       // 거래정지 · 봉 부족 — 스크리너(signal.js)와 같은 기준
     return S.tech(M.daily(code), a.daily.ind);
   }
   function render(force){
@@ -558,7 +559,7 @@ window.QT = window.QT || {};
     el.hidden = !g;
     if (!g) return;
     el.innerHTML = '<span class="cs-l">종합 매수 신호</span>' + badge(g, c.total != null ? c.total : c.tech != null ? c.tech : c.fund, true) +
-      '<span class="cs-d">' + (c.total != null ? '기술 ' + c.tech + ' · 재무 ' + c.fund : c.tech != null ? '기술만 · 재무 데이터 없음' : '재무만 · 실제 일봉 없음') + '</span><i data-lucide="chevron-right"></i>';
+      '<span class="cs-d">' + (c.total != null ? '기술 ' + c.tech + ' · 재무 ' + c.fund : c.tech != null ? '기술만 · 재무 데이터 없음' : M.isReal(st.code) ? '재무만 · 기술 분석 신뢰도 낮음' : '재무만 · 실제 일봉 없음') + '</span><i data-lucide="chevron-right"></i>';
   }
 
   function init(c){

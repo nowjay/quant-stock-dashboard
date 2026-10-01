@@ -36,8 +36,10 @@ window.QT = window.QT || {};
     return out;
   }
 
-  function detect(bars, ind, lookback){
+  /** @param opts.open  마지막 봉이 진행 중 — 종가가 정해져야 성립하는 캔들 · 박스권 돌파 · 거래량 급증은 끝난 봉까지만 본다 */
+  function detect(bars, ind, lookback, opts){
     const n = bars.length, L = lookback || 60, from = Math.max(2, n - L), last = n - 1, ev = [];
+    const done = opts && opts.open ? last - 1 : last;
     function push(i, dir, kind, title, desc, weight){ ev.push({ i:i, t:bars[i].t, dir:dir, kind:kind, title:title, desc:desc, weight:weight || 1 }); }
 
     crosses(ind.sma20, ind.sma50, from, last).forEach(function (x) {
@@ -75,7 +77,7 @@ window.QT = window.QT || {};
     }
 
     /* 캔들 패턴 — 최근 5봉, 직전 5봉 흐름과 함께 판단 */
-    for (let i = Math.max(6, n - 5); i <= last; i++){
+    for (let i = Math.max(6, n - 5); i <= done; i++){
       const b = bars[i], p = bars[i - 1], body = Math.abs(b.c - b.o), range = b.h - b.l;
       if (!(range > 0)) continue;
       const prior = (p.c - bars[i - 6].c) / bars[i - 6].c;
@@ -98,7 +100,7 @@ window.QT = window.QT || {};
       for (let j = i - 20; j < i; j++){ hi = Math.max(hi, bars[j].h); lo = Math.min(lo, bars[j].l); v += bars[j].v || 0; }
       return { hi:hi, lo:lo, v:v / 20 };
     }
-    for (let i = Math.max(23, n - 10); i <= last; i++){
+    for (let i = Math.max(23, n - 10); i <= done; i++){
       const bx = box(i), pb = box(i - 1), hi = bx.hi, lo = bx.lo, v = bx.v;
       const vr = v > 0 ? (bars[i].v || 0) / v : 0, withVol = vr >= 1.5;
       /* 전날은 자기 박스 안, 오늘 처음으로 박스를 벗어난 경우만 */

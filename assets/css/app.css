@@ -748,6 +748,15 @@ a.nw:hover{border-color:var(--line);box-shadow:var(--shadow-md)}
 .rel.caution{background:var(--amber-weak);color:#B54708}
 .muted{color:var(--muted)}
 .sum-note{margin:0;font-size:10.5px;color:var(--faint)}
+/* 분석 신뢰도 (입력 데이터 품질) — 보통: 주의, 낮음: 의견 · 목표가 보류 */
+.ql{font-size:12px;line-height:1.6;padding:9px 11px;border-radius:12px;background:var(--amber-weak);color:#93370D}
+.ql > b:first-child{display:flex;align-items:center;gap:4px;font-weight:800;margin-bottom:2px}
+.ql ul{margin:0;padding-left:16px}
+.ql.low{background:#FEE4E2;color:#B42318}
+.gauge-card.hold .tally,.gauge-card.hold .cats{display:none}
+.gauge-card.hold .why{color:#B54708;line-height:1.55;margin-top:8px}
+.gauge-card.hold svg{opacity:.35}
+.hz-foot .prob{font-size:10.5px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
 
 /* 게이지 보강 */
 .gauge .why{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 6px}

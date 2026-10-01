@@ -128,8 +128,8 @@ window.QT = window.QT || {};
     const M = QT.Market, st = M.BY_CODE[code];
     if (!st) return null;
     const q = M.lightQuote(code), price = q && q.price;
-    const real = M.isReal(code);
-    let key = code + '|' + (price || 0) + '|' + real + '|' + (QT.Fund ? QT.Fund.meta().updated : '');
+    const real = M.isReal(code), open = real && M.barOpen(code, '1D');
+    let key = code + '|' + (price || 0) + '|' + real + '|' + open + '|' + (QT.Fund ? QT.Fund.meta().updated : '');
     let d = null;
     if (real){
       d = M.daily(code);
@@ -138,17 +138,19 @@ window.QT = window.QT || {};
     const c = cache[code];
     if (c && c.key === key) return c.v;
 
+    /* 거래정지 · 무거래 등으로 지표가 성립하지 않는 종목은 기술 점수를 내지 않는다 (추천 목록에서 빠짐) */
     let t = null, tgt = null;
-    if (real && d && d.length >= 60){
+    const ql = real && d && d.length ? QT.Analysis.quality(d, { real:true }) : null;
+    if (real && d && d.length >= 60 && ql.level !== 'low'){
       try {
-        const core = QT.Analysis.core(d, st.cur);
+        const core = QT.Analysis.core(d, st.cur, { open:open });
         t = tech(d, core.ind);
         const T = QT.Targets && QT.Targets.build(d, core, st);
         if (T && T.mid && T.mid.base) tgt = { v:T.mid.base.v, pct:T.mid.base.pct };
       } catch (e) { console.warn('[QT] 스크리너 기술 분석 실패', code, e); }
     }
     const f = QT.Fund && price ? QT.Fund.analyze(code, price) : null;
-    const v = { code:code, st:st, price:price, rate:q ? q.rate : 0, real:real, tech:t, fund:f, target:tgt, combo:combine(t, f) };
+    const v = { code:code, st:st, price:price, rate:q ? q.rate : 0, real:real, tech:t, fund:f, target:tgt, quality:ql, combo:combine(t, f) };
     cache[code] = { key:key, v:v };
     return v;
   }
