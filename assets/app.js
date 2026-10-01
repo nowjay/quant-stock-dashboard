@@ -86,7 +86,10 @@
   const DEFAULT_WL = ['005930','000660','373220','035420','005380','196170','NVDA','AAPL'];
   const state = {
     code: '005930', tf:'1D', tab:'watch', mkt:'ALL', q:'', panel:'analysis',
-    view: (function () { try { return localStorage.getItem(VIEW_KEY) === 'stock' ? 'stock' : 'home'; } catch (e) { return 'home'; } })(),
+    view: (function () {
+      if (QT.Learn && QT.Learn.wantsView()) return 'learn';                // #learn/<주제> 링크로 들어온 경우
+      try { const v = localStorage.getItem(VIEW_KEY); return v === 'stock' || v === 'learn' ? v : 'home'; } catch (e) { return 'home'; }
+    })(),
     mcCat:'', mcMore:false, earnMore:false, newsCat:'',
     watchlist: (function () {
       try { const s = JSON.parse(localStorage.getItem(WL_KEY)); if (Array.isArray(s) && s.length) return s; } catch (e) {}
@@ -740,7 +743,7 @@
     score:'종합 점수: 추세 · 모멘텀 · 거래량 지표를 −100~+100으로 합산합니다. 추세가 뚜렷할 때(ADX 높음)는 추세 지표 비중을, 횡보장에서는 과매수·과매도 지표 비중을 높입니다. 등급은 지금의 추세 상태를 요약한 것이며 수익 예측이 아닙니다 — 과거 검증에서 등급과 10거래일 뒤 수익률 사이에 통계적으로 유의한 관계는 없었습니다.',
     rsi:'RSI(상대강도지수): 최근 14일 상승폭과 하락폭의 비율(0~100). 70 이상 과매수, 30 이하 과매도. 강한 상승 추세에서는 70 이상이 오래 이어지기도 합니다.',
     macd:'MACD: 12일과 26일 지수이동평균의 차이. 시그널선(9일 평균)을 위로 뚫으면 상승 힘이 붙는 것, 아래로 뚫으면 힘이 빠지는 것으로 봅니다.',
-    bb:'볼린저 밴드: 20일 평균 ± 표준편차×2. 주가의 약 95%가 밴드 안에서 움직이며, 밴드가 좁아지면 곧 큰 움직임이 나올 가능성이 큽니다.',
+    bb:'볼린저 밴드: 20일 평균 ± 표준편차×2. 주가는 대부분(실제 일봉 기준 약 90%) 밴드 안에서 움직이며, 밴드가 좁아지면 곧 큰 움직임이 나올 가능성이 큽니다.',
     adx:'ADX: 추세의 "세기"(0~100). 25 이상이면 추세가 뚜렷하고 20 이하면 횡보입니다. 방향은 +DI(상승 힘)와 −DI(하락 힘) 중 큰 쪽으로 판단합니다.',
     mfi:'MFI(자금흐름지수): 거래량까지 반영한 RSI. 80 이상은 돈이 과하게 몰린 과열, 20 이하는 빠져나간 침체로 봅니다.',
     obv:'OBV: 오른 날의 거래량은 더하고 내린 날은 빼서 누적한 값. 주가보다 먼저 방향을 바꾸는 경우가 많아 수급 확인에 씁니다.',
@@ -769,14 +772,30 @@
     reserve:'유보율: (이익잉여금 + 자본잉여금) ÷ 자본금. 회사가 벌어서 쌓아 둔 돈이 자본금의 몇 배인지로, 높을수록 위기 대응 여력이 큽니다.',
     fair:'적정주가: ① PER 밴드(과거 5년 PER 분포 × 기준 EPS) ② PBR 밴드(과거 PBR 분포 × BPS) ③ S-RIM(자기자본 + 초과이익의 현재가치) ④ DCF(잉여현금흐름 할인)를 가중평균했습니다. 모델이 맞지 않는 경우(예: 적자, 현금흐름 불안정, 자본 대비 이익이 과도)는 제외합니다.'
   };
-  function tip(k){ return GLOSS[k] ? '<button type="button" class="tip" aria-label="용어 설명" data-tip="' + GLOSS[k] + '">?</button>' : ''; }
+  /* 용어 설명 '?' → 주식 공부의 해당 주제 (assets/learn/data-*.js 의 id) */
+  const LEARN_OF = {
+    score:'ta', rsi:'rsi', macd:'macd', bb:'bb', adx:'adx', mfi:'volind', obv:'volind', ma:'ma', stoch:'stoch', cross:'cross', div:'div',
+    pivot:'pivot', mtf:'trend', bt:'backtest', fng:'sentiment', krs:'sentiment', per:'per', fper:'per', pbr:'pbr', roe:'roe', ev:'ev',
+    dy:'dividend', peg:'peg', fcf:'cashflow', health:'health', debt:'health', icr:'health', reserve:'health', fair:'dcf'
+  };
+  function tip(k){
+    return GLOSS[k] ? '<button type="button" class="tip" aria-label="용어 설명" data-tip="' + GLOSS[k] + '"' +
+      (LEARN_OF[k] ? ' data-learn="' + LEARN_OF[k] + '"' : '') + '>?</button>' : '';
+  }
   (function initTips(){
     const box = document.createElement('div');
     box.className = 'tipbox'; box.setAttribute('role', 'tooltip'); box.hidden = true;
     document.body.appendChild(box);
-    let owner = null;
+    let owner = null, hideT = 0;
     function show(btn){
+      clearTimeout(hideT);
       owner = btn; box.textContent = btn.dataset.tip; box.hidden = false;
+      if (btn.dataset.learn && QT.Learn){
+        const more = document.createElement('button');
+        more.type = 'button'; more.className = 'tip-more'; more.dataset.learn = btn.dataset.learn;
+        more.textContent = '주식 공부에서 자세히 보기 →';
+        box.appendChild(more);
+      }
       const r = btn.getBoundingClientRect(), w = Math.min(280, window.innerWidth - 24);
       box.style.width = w + 'px';
       const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
@@ -784,14 +803,23 @@
       const below = r.bottom + 8, h = box.offsetHeight;
       box.style.top = (below + h > window.innerHeight - 8 ? r.top - h - 8 : below) + 'px';
     }
-    function hide(){ owner = null; box.hidden = true; }
+    function hide(){ clearTimeout(hideT); owner = null; box.hidden = true; }
+    /* 마우스를 '?' 에서 설명 상자(자세히 보기 버튼)로 옮길 틈을 준다 */
+    function hideSoon(){ clearTimeout(hideT); hideT = setTimeout(hide, 240); }
     document.addEventListener('click', function (e) {
+      const more = e.target.closest('.tip-more');
+      if (more){ const id = more.dataset.learn; hide(); openLearn(id); return; }
       const b = e.target.closest('.tip');
       if (b){ e.stopPropagation(); show(b); return; }           // 마우스 오버로 이미 열려 있어도 닫지 않음
       if (!e.target.closest('.tipbox')) hide();
     });
-    document.addEventListener('mouseover', function (e) { const b = e.target.closest && e.target.closest('.tip'); if (b && b !== owner) show(b); });
-    document.addEventListener('mouseout', function (e) { if (e.target.closest && e.target.closest('.tip') && owner) hide(); });
+    document.addEventListener('mouseover', function (e) {
+      if (!e.target.closest) return;
+      const b = e.target.closest('.tip');
+      if (b){ if (b !== owner) show(b); else clearTimeout(hideT); }
+      else if (e.target.closest('.tipbox')) clearTimeout(hideT);
+    });
+    document.addEventListener('mouseout', function (e) { if (e.target.closest && e.target.closest('.tip, .tipbox') && owner) hideSoon(); });
     window.addEventListener('scroll', hide, true);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
   })();
@@ -1440,9 +1468,9 @@
     if (window.innerWidth <= 900) closeDrawer();
   }
 
-  /* ---------------- 화면 전환 (홈 ↔ 종목 분석) ---------------- */
+  /* ---------------- 화면 전환 (홈 · 종목 분석 · 주식 공부) ---------------- */
   function setView(v){
-    if (v !== 'home' && v !== 'stock') return;
+    if (v !== 'home' && v !== 'stock' && v !== 'learn') return;
     const changed = state.view !== v;
     state.view = v;
     document.body.dataset.view = v;
@@ -1463,9 +1491,29 @@
       }
     } else {
       if (isFs()) setFs(false);
-      if (QT.Home) QT.Home.render();
+      if (v === 'home'){ if (QT.Home) QT.Home.render(); }
+      else if (QT.Learn) QT.Learn.show();
     }
+    /* 공부 화면을 벗어나면 주소의 #learn/<주제> 를 지운다 (새로고침 때 공부 화면으로 되돌아가지 않도록) */
+    if (v !== 'learn' && /^#learn(\/|$)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     if (changed) window.scrollTo(0, 0);
+  }
+  function openPanel(p){
+    setView('stock');
+    const b = $('#side-tabs button[data-panel="' + p + '"]');
+    if (b && !b.classList.contains('on')) b.click();
+  }
+  /* 주식 공부 ↔ 다른 화면 이동 */
+  function goFromLearn(where){
+    if (where === 'learn') setView('learn');
+    else if (where === 'home') setView('home');
+    else if (where === 'macro') openMacro();
+    else openPanel(where === 'value' ? 'value' : 'analysis');
+  }
+  function openLearn(id){
+    if (!QT.Learn) return;
+    QT.Learn.openTopic(id);
+    setView('learn');
   }
   /* 홈의 '전체 일정 · 증시 뉴스' → 종목 분석 화면의 글로벌 매크로 탭 */
   function openMacro(){
@@ -1766,6 +1814,7 @@
     if (QT.Home) QT.Home.init({ select:select, openMacro:openMacro, tip:tip });
     if (QT.Value) QT.Value.init({ select:select, tip:tip });
     if (QT.Screener) QT.Screener.init({ select:select, refresh:renderList, current:function () { return state.code; } });
+    if (QT.Learn) QT.Learn.init({ go:goFromLearn });
     setView(state.view);                              // 종목 분석 화면이면 여기서 차트를 만든다
     /* 시장 스냅샷(예상치 · 이번 주 확정 일정)이 도착하면 매크로 탭 일정도 다시 그린다 */
     if (QT.Markets) QT.Markets.on(function (kind) {
