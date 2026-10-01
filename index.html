@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FFFFFF">
 <title>QUANT 주식 대시보드</title>
-<meta name="description" content="글로벌 지수 전광판 · 환율 · 원자재 · 금리 · 공포/탐욕 지수 · 매크로 D-Day · 실시간 캔들 차트 · AI 목표주가 · 재무 가치분석 · 추천 종목 스크리너 대시보드">
+<meta name="description" content="글로벌 지수 전광판 · 환율 · 원자재 · 금리 · 공포/탐욕 지수 · 매크로 D-Day · 실시간 캔들 차트 · AI 목표주가 · 재무 가치분석 · 추천 종목 스크리너 · 주식 공부(용어 · 기술적 분석 · 가치 분석) 대시보드">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20261001c">
+<link rel="stylesheet" href="assets/css/app.css?v=20261001d">
 </head>
 <body data-view="home">
 <script>/* 마지막으로 본 화면을 먼저 적용해 깜빡임을 막는다 (app.js 의 VIEW_KEY) */
-  try { if (localStorage.getItem('qt.view.v1') === 'stock') document.body.dataset.view = 'stock'; } catch (e) {}</script>
+  try {
+    var v = /^#learn(\/|$)/.test(location.hash) ? 'learn' : localStorage.getItem('qt.view.v1');
+    if (v === 'stock' || v === 'learn') document.body.dataset.view = v;
+  } catch (e) {}</script>
 
 <header class="topbar">
   <button class="icon-btn menu-btn" id="menu-btn" aria-label="관심종목 열기"><i data-lucide="menu"></i></button>
@@ -21,6 +24,7 @@
   <nav class="vnav" id="vnav" aria-label="화면 전환">
     <button data-view="home" class="on"><i data-lucide="layout-dashboard"></i>홈</button>
     <button data-view="stock"><i data-lucide="candlestick-chart"></i><span class="vn-l">종목 분석</span><span class="vn-s">분석</span></button>
+    <button data-view="learn"><i data-lucide="graduation-cap"></i><span class="vn-l">주식 공부</span><span class="vn-s">공부</span></button>
   </nav>
   <div class="grow"></div>
   <button class="icon-btn search-btn" id="search-btn" aria-label="종목 검색"><i data-lucide="search"></i></button>
@@ -130,6 +134,25 @@
           </div>
         </section>
       </aside>
+    </div>
+  </section>
+
+  <!-- ==================== 주식 공부 ==================== -->
+  <section class="learn" id="learn" aria-label="주식 공부" data-pane="list">
+    <header class="h-hero lr-hero">
+      <div class="h-hd"><h1>주식 공부</h1><span id="lr-count"></span></div>
+      <p class="h-brief">채권 · 국채부터 볼린저 밴드 · 골든크로스 · RSI · MACD, 재무제표와 PER까지 — 투자에 필요한 개념을 쉬운 설명과 숫자 예시, 확인 문제로 익힙니다.</p>
+    </header>
+    <div class="lr-grid">
+      <nav class="lr-side card" aria-label="학습 목차">
+        <div class="lr-search">
+          <i data-lucide="search"></i>
+          <input id="lr-q" type="search" placeholder="용어 검색 (예: 골든크로스 · PER · 국채)" autocomplete="off" spellcheck="false" aria-label="학습 주제 검색">
+        </div>
+        <div class="lr-prog" id="lr-prog"></div>
+        <div class="lr-toc" id="lr-toc"><div class="loading">학습 내용을 불러오는 중…</div></div>
+      </nav>
+      <article class="lr-doc card" id="lr-doc" aria-live="off"></article>
     </div>
   </section>
 
@@ -430,27 +453,28 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20261001c"></script>
-<script src="assets/core/search.js?v=20261001c"></script>
-<script src="assets/core/events.js?v=20261001c"></script>
-<script src="assets/core/markets.js?v=20261001c"></script>
-<script src="assets/core/market-data.js?v=20261001c"></script>
-<script src="assets/core/indicators.js?v=20261001c"></script>
-<script src="assets/core/scoring.js?v=20261001c"></script>
-<script src="assets/core/patterns.js?v=20261001c"></script>
-<script src="assets/core/targets.js?v=20261001c"></script>
-<script src="assets/core/analysis.js?v=20261001c"></script>
-<script src="assets/core/backtest.js?v=20261001c"></script>
-<script src="assets/core/fundamentals.js?v=20261001c"></script>
-<script src="assets/core/signal.js?v=20261001c"></script>
-<script src="assets/core/news.js?v=20261001c"></script>
-<script src="assets/feed/mock.js?v=20261001c"></script>
-<script src="assets/feed/kis.js?v=20261001c"></script>
-<script src="assets/feed/toss.js?v=20261001c"></script>
-<script src="assets/feed/index.js?v=20261001c"></script>
-<script src="assets/home.js?v=20261001c"></script>
-<script src="assets/value.js?v=20261001c"></script>
-<script src="assets/screener.js?v=20261001c"></script>
-<script src="assets/app.js?v=20261001c"></script>
+<script src="assets/core/fx.js?v=20261001d"></script>
+<script src="assets/core/search.js?v=20261001d"></script>
+<script src="assets/core/events.js?v=20261001d"></script>
+<script src="assets/core/markets.js?v=20261001d"></script>
+<script src="assets/core/market-data.js?v=20261001d"></script>
+<script src="assets/core/indicators.js?v=20261001d"></script>
+<script src="assets/core/scoring.js?v=20261001d"></script>
+<script src="assets/core/patterns.js?v=20261001d"></script>
+<script src="assets/core/targets.js?v=20261001d"></script>
+<script src="assets/core/analysis.js?v=20261001d"></script>
+<script src="assets/core/backtest.js?v=20261001d"></script>
+<script src="assets/core/fundamentals.js?v=20261001d"></script>
+<script src="assets/core/signal.js?v=20261001d"></script>
+<script src="assets/core/news.js?v=20261001d"></script>
+<script src="assets/feed/mock.js?v=20261001d"></script>
+<script src="assets/feed/kis.js?v=20261001d"></script>
+<script src="assets/feed/toss.js?v=20261001d"></script>
+<script src="assets/feed/index.js?v=20261001d"></script>
+<script src="assets/home.js?v=20261001d"></script>
+<script src="assets/value.js?v=20261001d"></script>
+<script src="assets/screener.js?v=20261001d"></script>
+<script src="assets/learn.js?v=20261001d"></script>
+<script src="assets/app.js?v=20261001d"></script>
 </body>
 </html>
