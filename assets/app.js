@@ -97,6 +97,38 @@
   };
   function saveWL(){ try { localStorage.setItem(WL_KEY, JSON.stringify(state.watchlist)); } catch (e) {} }
 
+  /* ---------------- 관심종목 추가 · 해제 ----------------
+     별 버튼은 세 곳에 있다: 사이드바 목록, 검색 결과, 종목 헤더(#q-star).
+     검색으로 연 종목은 관심종목 목록에 없으므로 헤더 · 검색 결과의 버튼이 유일한 등록 경로다 */
+  function inWL(code){ return state.watchlist.indexOf(code) >= 0; }
+  function toggleWatch(code){
+    const at = state.watchlist.indexOf(code), st = M.BY_CODE[code];
+    if (at >= 0) state.watchlist.splice(at, 1); else state.watchlist.push(code);
+    saveWL(); renderList(); subscribeAll(); syncStar();
+    toast((st ? st.name : code) + (at >= 0 ? ' · 관심종목에서 뺐습니다' : ' · 관심종목에 추가했습니다'));
+  }
+  function syncStar(){
+    const b = $('#q-star');
+    if (!b) return;
+    const on = inWL(state.code);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.querySelector('span').textContent = on ? '관심종목' : '관심종목 추가';
+    b.title = on ? '관심종목에서 빼기' : '관심종목에 추가';
+  }
+  let toastTimer = 0;
+  function toast(msg){
+    const el = $('#toast');
+    if (!el) return;
+    el.textContent = msg; el.hidden = false;
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      el.classList.remove('show');
+      toastTimer = setTimeout(function () { el.hidden = true; }, 220);
+    }, 2200);
+  }
+
   /* ---------------- 차트 ---------------- */
   const COLORS = {
     up:'#F04438', down:'#3B82F6', upFill:'rgba(240,68,56,.32)', downFill:'rgba(59,130,246,.32)',
@@ -592,21 +624,23 @@
       box.innerHTML = items.map(function (it, i) {
         const st = M.BY_CODE[it.code];
         const lq = st ? M.lightQuote(it.code) : null;
-        const cur = it.cur;
+        const cur = it.cur, on = inWL(it.code);
         return '<div class="ac-item' + (i === 0 ? ' sel' : '') + '" role="option" data-code="' + it.code + '" data-i="' + i + '">' +
           '<div><div class="nm">' + QT.Search.highlight(it.name, q) + '</div>' +
             '<div class="meta"><span class="code">' + it.code + '</span><span class="chip">' + it.market + '</span>' +
-            (it.type === 'etf' ? '<span class="chip">ETF</span>' : '') + '</div></div>' +
+            (it.type === 'etf' && it.market !== 'ETF' ? '<span class="chip">ETF</span>' : '') + '</div></div>' +
           '<div>' + (lq && lq.price != null
             ? '<div class="px">' + price(lq.price, cur) + '</div><div class="ch ' + cls(lq.rate) + '">' + pct(lq.rate) + '</div>'
             : '<div class="ch">—</div>') + '</div>' +
+          '<button type="button" class="star' + (on ? ' on' : '') + '" data-star="' + it.code + '" aria-label="관심종목 ' + (on ? '해제' : '추가') + '"><i data-lucide="star"></i></button>' +
         '</div>';
       }).join('') +
-      '<div class="ac-foot"><span>전체 ' + QT.Search.items.length.toLocaleString('ko-KR') + '종목 검색</span>' +
-        '<span><span class="kbd">↑↓</span> 이동 <span class="kbd">Enter</span> 선택</span></div>';
+      '<div class="ac-foot"><span>전체 ' + QT.Search.items.length.toLocaleString('ko-KR') + '종목 검색 · 별을 누르면 관심종목</span>' +
+        '<span class="kbd-hint"><span class="kbd">↑↓</span> 이동 <span class="kbd">Enter</span> 선택</span></div>';
     }
     box.hidden = false; state.ac.open = true;
     $('#q').setAttribute('aria-expanded', 'true');
+    icons();
   }
   function closeAC(){ $('#ac').hidden = true; state.ac.open = false; $('#q').setAttribute('aria-expanded', 'false'); }
   function moveAC(delta){
@@ -850,7 +884,7 @@
     /* 어느 봉의 고저종으로 만든 선인지 — 09.28 (월) 기준 → 다음 거래일 */
     const pvWhen = state.tf === '1W' ? '다음 주' : state.tf === '1M' ? '다음 달' : '다음 거래일';
     const pvNow = state.tf === '1W' ? '이번 주' : state.tf === '1M' ? '이번 달' : '오늘';
-    $('#lv-basis').textContent = '피봇 · ' + (state.tf === '1W' || state.tf === '1M' ? barLabel({ t:pv.t, te:pv.te }) : dayLabel(pv.t).slice(5)) +
+    $('#lv-basis').textContent = (state.tf === '1W' || state.tf === '1M' ? barLabel({ t:pv.t, te:pv.te }) : dayLabel(pv.t).slice(5)) +
       ' 기준 → ' + (pv.open ? pvNow : pvWhen);
     const levels = [{ k:'R2', v:pv.R2 }, { k:'R1', v:pv.R1 }, { k:'P', v:pv.P }, { k:'S1', v:pv.S1 }, { k:'S2', v:pv.S2 }];
     let maxd = 0;
@@ -1268,6 +1302,7 @@
   }
   function loadSymbol(resetView){
     const st = M.BY_CODE[state.code];
+    syncStar();
     /* 공공데이터 일봉을 아직 안 받은 국내 종목 — 받은 뒤 다시 그린다 (이전 차트는 흐리게 유지) */
     if (M.needsDaily(state.code)){
       const code = state.code;
@@ -1433,9 +1468,7 @@
     const star = e.target.closest('[data-star]');
     if (star){
       e.stopPropagation();
-      const code = star.dataset.star, at = state.watchlist.indexOf(code);
-      if (at >= 0) state.watchlist.splice(at, 1); else state.watchlist.push(code);
-      saveWL(); renderList(); subscribeAll();
+      toggleWatch(star.dataset.star);
       return;
     }
     const row = e.target.closest('.wl-row, .scr-card');
@@ -1457,9 +1490,19 @@
     } else if (e.key === 'Escape'){ closeAC(); }
   });
   $('#ac').addEventListener('mousedown', function (e) {
+    const star = e.target.closest('[data-star]');
+    if (star){                                       // 별: 목록을 닫지 않고 관심종목만 바꾼다 (여러 종목을 이어서 담을 수 있게)
+      e.preventDefault();
+      const code = star.dataset.star;
+      toggleWatch(code);
+      star.classList.toggle('on', inWL(code));
+      star.setAttribute('aria-label', '관심종목 ' + (inWL(code) ? '해제' : '추가'));
+      return;
+    }
     const it = e.target.closest('.ac-item');
     if (it){ e.preventDefault(); pickAC(it.dataset.code); }
   });
+  $('#q-star').addEventListener('click', function () { toggleWatch(state.code); });
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.search')) closeAC();
   });
@@ -1489,6 +1532,9 @@
       renderMacro();
       if (NEWS) NEWS.start().refresh();
     }
+    /* 탭이 상단에 붙은 채(모바일) 다른 패널로 바꾸면 그 패널의 처음부터 보이도록 */
+    const aside = $('.aside');
+    if (window.innerWidth <= 900 && aside.getBoundingClientRect().top < 60) aside.scrollIntoView({ block:'start' });
   });
   function chipGroup(sel, onPick){
     $(sel).addEventListener('click', function (e) {
@@ -1567,10 +1613,20 @@
     else if (fs && e.key === 'ArrowRight'){ e.preventDefault(); panBy(120); }
   });
 
-  function openDrawer(){ $('#side').classList.add('open'); $('#scrim').classList.add('show'); }
-  function closeDrawer(){ $('#side').classList.remove('open'); $('#scrim').classList.remove('show'); }
+  /* 서랍이 열려 있는 동안 뒤 화면이 같이 스크롤되지 않게 잠근다 (CSS 는 900px 이하에서만 적용) */
+  function openDrawer(){ $('#side').classList.add('open'); $('#scrim').classList.add('show'); document.body.classList.add('drawer-lock'); }
+  function closeDrawer(){ $('#side').classList.remove('open'); $('#scrim').classList.remove('show'); document.body.classList.remove('drawer-lock'); }
   $('#menu-btn').addEventListener('click', function () { $('#side').classList.contains('open') ? closeDrawer() : openDrawer(); });
   $('#scrim').addEventListener('click', closeDrawer);
+  /* 모바일 상단 검색 버튼 — 서랍을 열고 바로 입력할 수 있게 (같은 탭 동작 안에서 포커스해야 키보드가 뜬다) */
+  $('#search-btn').addEventListener('click', function () {
+    openDrawer();
+    $('#side').scrollTop = 0;
+    $('#q').focus({ preventScroll:true });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('#side').classList.contains('open') && !state.ac.open) closeDrawer();
+  });
 
   /* ---------------- 연결 설정 ---------------- */
   function fillModal(provider){
@@ -1614,9 +1670,11 @@
       $('#f-news-proxy-wrap').hidden = n.mode !== 'proxy';
     }
     $('#modal').classList.add('show');
+    document.body.classList.add('modal-lock');
+    $('#modal .m-body').scrollTop = 0;
   }
   $('#f-provider').addEventListener('change', function () { fillModal(this.value); });
-  function closeModal(){ $('#modal').classList.remove('show'); }
+  function closeModal(){ $('#modal').classList.remove('show'); document.body.classList.remove('modal-lock'); }
   $('#settings-btn').addEventListener('click', function () { openModal(); });
   $('#connect-btn').addEventListener('click', function () { openModal(); });
   $('#m-cancel').addEventListener('click', closeModal);
