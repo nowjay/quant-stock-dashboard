@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>토스증권 실시간 시세 연결 안내 · QUANT</title>
-<meta name="description" content="각자 본인의 토스증권 Open API 키로 QUANT 대시보드에 실시간 시세를 연결하는 방법">
+<meta name="description" content="각자 본인의 토스증권 Open API 키로 QUANT 대시보드에 실시간 시세를 연결하는 방법 — 오라클 클라우드 무료 서버 만들기부터 접속 키 연결까지">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -20,6 +20,7 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0}
+  html{scroll-behavior:smooth}
   body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
   .wrap{max-width:720px;margin:0 auto;padding:28px 16px 64px}
   .back{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:700}
@@ -33,33 +34,83 @@
   .need li{background:var(--hair);border-radius:12px;padding:12px;font-size:13px;color:var(--ink-2)}
   .need b{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
   @media (max-width:560px){.need{grid-template-columns:1fr}}
+
+  /* 한눈에 보기 */
+  .flow{display:flex;align-items:stretch;gap:6px;margin:4px 0 12px}
+  .flow .node{flex:1;min-width:0;background:var(--hair);border-radius:12px;padding:12px 10px;text-align:center;font-size:13px;color:var(--ink-2)}
+  .flow .node b{display:block;color:var(--ink);font-size:14px}
+  .flow .node.mine{background:var(--blue-weak);color:var(--blue-ink)}
+  .flow .arrow{flex:none;align-self:center;color:var(--muted);font-weight:800}
+  @media (max-width:560px){.flow{flex-direction:column}.flow .arrow{transform:rotate(90deg)}}
+  dl.terms{margin:10px 0 0;font-size:14px}
+  dl.terms dt{font-weight:700;color:var(--ink);margin-top:10px}
+  dl.terms dd{margin:0;color:var(--ink-2)}
+
+  /* 목차 */
+  .toc{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;font-size:13px}
+  .toc a{display:inline-block;text-decoration:none;background:var(--hair);color:var(--ink-2);border-radius:999px;padding:5px 11px;font-weight:700}
+  .toc a:hover{background:var(--blue-weak);color:var(--blue-ink)}
+
   ol.steps{counter-reset:s;list-style:none;margin:0;padding:0}
-  ol.steps>li{counter-increment:s;position:relative;padding-left:44px;margin-bottom:22px}
+  ol.steps>li{counter-increment:s;position:relative;padding-left:44px;margin-bottom:30px;scroll-margin-top:16px}
   ol.steps>li:last-child{margin-bottom:0}
   ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:30px;height:30px;border-radius:50%;
     background:var(--blue);color:#fff;font-weight:800;font-size:14px;display:grid;place-items:center}
+  @media (max-width:560px){
+    ol.steps>li{padding-left:0}
+    ol.steps>li::before{position:static;margin-bottom:6px}
+  }
   h2{font-size:17px;margin:0 0 12px;letter-spacing:-.01em}
   h3{font-size:15.5px;margin:3px 0 6px}
+  h3 .time{font-weight:500;font-size:12.5px;color:var(--muted);margin-left:6px;white-space:nowrap}
+  h4{font-size:14px;margin:14px 0 4px;color:var(--ink)}
   p{margin:0 0 8px}
   ul.sub{margin:6px 0 0;padding-left:18px;color:var(--ink-2);font-size:14px}
   ul.sub li{margin-bottom:4px}
+  ol.do{margin:8px 0 0;padding-left:20px;color:var(--ink-2);font-size:14px}
+  ol.do>li{margin-bottom:7px;padding-left:2px}
+  ol.do>li::marker{font-weight:700;color:var(--blue-ink)}
+  ol.do ul{margin:4px 0 0;padding-left:16px}
+  ol.do ul li{margin-bottom:3px}
   .path{font-weight:700;color:var(--ink)}
+  .ui{display:inline-block;font-weight:700;font-size:13px;color:var(--ink);background:var(--hair);border:1px solid var(--line);border-radius:6px;padding:0 6px;line-height:1.55}
+  kbd{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--ink)}
   .cmd{display:flex;align-items:stretch;background:#111827;border-radius:10px;margin:8px 0;overflow:hidden}
   .cmd code{flex:1;min-width:0;color:#E5E7EB;font-family:var(--mono);font-size:12.5px;padding:11px 12px;overflow-x:auto;white-space:pre}
+  .cmd code .ph{color:#FCD34D}
   .cmd button{flex:none;border:0;background:#1F2937;color:#D1D5DB;font:700 12px var(--sans);padding:0 14px;cursor:pointer}
   .cmd button:hover{background:#374151;color:#fff}
-  code.in{font-family:var(--mono);font-size:12.5px;background:var(--hair);border-radius:6px;padding:1px 6px}
+  pre.term{background:#111827;color:#E5E7EB;font-family:var(--mono);font-size:12px;line-height:1.6;border-radius:10px;padding:12px;margin:8px 0;overflow-x:auto;white-space:pre}
+  pre.term mark{background:none;color:#FCD34D;font-weight:500}
+  pre.term .dim{color:#9CA3AF}
+  code.in{font-family:var(--mono);font-size:12.5px;background:var(--hair);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}
   .ok{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:700}
   .pill.live{background:#ECFDF3;color:#067647}
   .pill.src{background:var(--blue-weak);color:var(--blue-ink)}
   .pill.live::before{content:'';width:7px;height:7px;border-radius:50%;background:#12B76A}
+  .tip{background:var(--amber-weak);color:var(--amber-ink);border-radius:10px;padding:10px 12px;font-size:13.5px;margin:10px 0}
+  .tip b{color:#7A2E0E}
+  .done{background:#ECFDF3;color:#067647;border-radius:10px;padding:10px 12px;font-size:13.5px;margin:10px 0 0}
+  .ipbox{background:var(--blue-weak);border-radius:12px;padding:12px 14px;margin:10px 0}
+  .ipbox label{display:block;font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:6px}
+  .ipbox input{width:100%;max-width:260px;font:500 15px var(--mono);color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .ipbox input:focus{outline:2px solid var(--blue);outline-offset:1px}
+  .ipbox .hint{font-size:12.5px;color:var(--ink-2);margin-top:6px}
+  .ipbox .hint.bad{color:#B42318}
+  .os{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0}
+  .os h4{margin-top:0}
+  details{border:1px solid var(--line);border-radius:12px;padding:0 14px;margin:10px 0;font-size:14px;color:var(--ink-2)}
+  details>summary{cursor:pointer;font-weight:700;color:var(--ink);padding:11px 0;list-style-position:inside}
+  details[open]{padding-bottom:12px}
+  details[open]>summary{border-bottom:1px solid var(--hair);margin-bottom:10px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;vertical-align:top;padding:10px 8px;border-top:1px solid var(--hair)}
   th{width:42%;font-weight:700;color:var(--ink)}
   td{color:var(--ink-2)}
   tr:first-child th,tr:first-child td{border-top:0}
-  @media (max-width:560px){th,td{display:block;width:auto;padding:4px 0}th{padding-top:12px}}
+  table.qa th{width:46%}
+  @media (max-width:560px){th,td{display:block;width:auto;padding:4px 0}th{padding-top:12px}table.qa th{width:auto}}
   .warn{background:var(--up-weak);color:#912018;border-radius:12px;padding:14px 16px;font-size:14px}
   .warn ul{margin:6px 0 0;padding-left:18px}
   .note{color:var(--muted);font-size:13px}
@@ -72,7 +123,7 @@
   <h1>토스증권 실시간 시세 연결하기</h1>
   <p class="lead">이 대시보드의 차트와 분석은 누구나 <b>공공데이터포털(금융위원회) 전 영업일 종가</b>로 볼 수 있고,
     <b>실시간 주가</b>(오늘 봉 · 1분봉 포함)는 <b>각자 본인의 토스증권 Open API 키</b>로 연결해야 보입니다.
-    한 번 설정해 두면 휴대폰·PC 어디서든 내 시세가 뜹니다.</p>
+    한 번 설정해 두면 휴대폰·PC 어디서든 내 시세가 뜹니다. 개발을 해 본 적이 없어도 <b>화면에 적힌 대로 누르고, 명령어는 복사·붙여넣기</b>만 하면 됩니다.</p>
 
   <div class="why">
     <span>ℹ️</span>
@@ -81,66 +132,279 @@
   </div>
 
   <section class="card">
+    <h2>무엇을 만드나요</h2>
+    <div class="flow" aria-label="연결 구조">
+      <div class="node"><b>내 휴대폰 · PC</b>대시보드 화면</div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="node mine"><b>내 서버 (프록시)</b>오라클 클라우드 · 무료</div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="node"><b>토스증권</b>실시간 시세</div>
+    </div>
+    <p>토스증권은 <b>미리 등록한 인터넷 주소(IP) 한 곳</b>에서 온 요청에만 시세를 줍니다. 집 와이파이나 휴대폰은 주소가 수시로 바뀌므로,
+      주소가 바뀌지 않는 <b>내 전용 서버</b>를 하나 만들어 그 서버가 대신 시세를 받아 내 화면으로 전달하게 합니다.</p>
+    <details>
+      <summary>처음 보는 낱말 풀이</summary>
+      <dl class="terms">
+        <dt>서버 (인스턴스)</dt><dd>인터넷에 24시간 켜져 있는 내 전용 컴퓨터입니다. 오라클에서는 <b>Instance</b>라고 부릅니다. 내 PC를 꺼도 계속 돌아갑니다.</dd>
+        <dt>공인 IP</dt><dd>서버의 인터넷 주소입니다(예: 152.67.200.10). 토스증권에 "이 주소만 허용"으로 등록합니다.</dd>
+        <dt>프록시</dt><dd>서버에서 도는 작은 중계 프로그램입니다. 내 토스 키를 보관하고 <b>시세 조회만</b> 내 화면으로 전달합니다. 설치는 명령어 두 줄로 끝납니다.</dd>
+        <dt>접속 키 (프록시 키)</dt><dd>내 프록시에 들어가기 위한 비밀번호입니다. <b>설치할 때 자동으로 만들어지고</b>, 설치 끝에 나오는 연결 링크와 QR 코드에 들어 있습니다. 직접 만들 필요가 없습니다.</dd>
+        <dt>터미널 · SSH</dt><dd>글자로 명령을 입력하는 창이 터미널, 그 창으로 멀리 있는 서버에 들어가는 방법이 SSH입니다. Mac·Windows에 기본으로 들어 있어 따로 설치할 것이 없습니다.</dd>
+      </dl>
+    </details>
+  </section>
+
+  <section class="card">
     <h2>준비물</h2>
     <ul class="need">
       <li><b>토스증권 계좌</b>Open API 키를 발급받을 본인 계좌</li>
-      <li><b>클라우드 서버 1대</b>AWS Lightsail(유료, 소액) 또는 Oracle Cloud 무료 등급</li>
-      <li><b>20~30분</b>명령어는 복사·붙여넣기 두 줄</li>
+      <li><b>해외 결제 카드 1장</b>오라클 가입 시 본인 확인용 (요금이 나가지 않습니다)</li>
+      <li><b>PC와 40~60분</b>Mac 또는 Windows. 가입 · 서버 생성은 PC에서 하세요</li>
     </ul>
+    <p class="note" style="margin:12px 0 0">아래는 <b>오라클 클라우드 무료 등급(Always Free)</b> 기준입니다. 무료 범위 안에서만 만들기 때문에 유료로 전환(Upgrade)을 직접 누르지 않는 한 요금이 청구되지 않습니다.</p>
   </section>
 
   <section class="card">
     <h2>설정 순서</h2>
+    <ul class="toc" style="margin-bottom:20px">
+      <li><a href="#s1">1 토스 키 발급</a></li>
+      <li><a href="#s2">2 오라클 가입</a></li>
+      <li><a href="#s3">3 서버 만들기</a></li>
+      <li><a href="#s4">4 방화벽 열기</a></li>
+      <li><a href="#s5">5 서버 접속</a></li>
+      <li><a href="#s6">6 프록시 설치</a></li>
+      <li><a href="#s7">7 허용 IP 등록</a></li>
+      <li><a href="#s8">8 기기 연결</a></li>
+    </ul>
+
     <ol class="steps">
-      <li>
-        <h3>토스증권 Open API 키 발급</h3>
+      <li id="s1">
+        <h3>토스증권 Open API 키 발급 <span class="time">약 3분</span></h3>
         <p>PC에서 토스증권 웹(WTS)에 로그인 → <span class="path">설정 → Open API</span>에서
           <code class="in">client_id</code>와 <code class="in">client_secret</code>을 발급받습니다.</p>
-        <ul class="sub"><li>화면의 <b>복사 버튼</b>으로 복사해 두세요. 앞뒤 공백이 섞이면 인증이 실패합니다.</li></ul>
-      </li>
-      <li>
-        <h3>서버 만들기 (고정 IP)</h3>
-        <p>토스증권은 등록한 IP에서만 API를 허용하므로, <b>IP가 바뀌지 않는 서버</b>가 필요합니다.</p>
         <ul class="sub">
-          <li><b>AWS Lightsail</b> — 리전 <b>서울</b>, Linux/Unix, <b>OS 전용 → Ubuntu 24.04</b>, IPv4가 포함된 가장 작은 플랜으로 생성
-            → <span class="path">네트워킹</span> 탭에서 <b>고정 IP 생성·연결</b>, IPv4 방화벽에 <b>HTTPS(443)</b> 추가</li>
-          <li><b>Oracle Cloud 무료 등급</b> — Ubuntu 인스턴스 생성 → <b>예약 공인 IP</b> 연결 → Security List에 TCP 80·443 허용</li>
+          <li>화면의 <b>복사 버튼</b>으로 복사해 메모장에 잠깐 붙여 두세요. 6단계에서 씁니다. 앞뒤 공백이 섞이면 인증이 실패합니다.</li>
+          <li>이 두 값은 <b>내 서버에만</b> 입력합니다. 다른 사람이나 이 사이트에 보낼 일이 없습니다.</li>
         </ul>
       </li>
-      <li>
-        <h3>프록시 설치</h3>
-        <p>서버 콘솔의 <span class="path">SSH로 연결</span> 창에서 아래 두 줄을 차례로 붙여넣습니다.</p>
+
+      <li id="s2">
+        <h3>오라클 클라우드 가입 <span class="time">약 10분</span></h3>
+        <p>오라클 클라우드는 작은 서버를 <b>기간 제한 없이 무료</b>로 쓸 수 있는 등급(Always Free)이 있습니다.</p>
+        <ol class="do">
+          <li><a href="https://signup.oraclecloud.com" target="_blank" rel="noopener">signup.oraclecloud.com</a>을 엽니다.</li>
+          <li><b>Country</b>는 South Korea, 이름과 이메일을 입력하고 <span class="ui">Verify my email</span>을 누릅니다. 받은 메일의 링크를 30분 안에 누르면 다음 화면으로 넘어갑니다.</li>
+          <li>비밀번호를 정합니다 (8자 이상, 대문자 · 소문자 · 숫자 · 특수문자 각 1개 이상).</li>
+          <li><b>Cloud Account Name</b>을 정합니다. 영문 소문자와 숫자로 짧게 지으세요(예: <code class="in">mystock2026</code>). <b>로그인할 때마다 필요하니 메모</b>해 두세요.</li>
+          <li><b>Home Region</b>은 <span class="ui">South Korea Central (Seoul)</span> 또는 <span class="ui">South Korea North (Chuncheon)</span>을 고릅니다.
+            <div class="tip"><b>가입 후에는 바꿀 수 없습니다.</b> 무료 서버는 여기서 고른 지역에만 만들 수 있으니 꼭 한국 지역으로 고르세요.</div></li>
+          <li>주소(영문)와 휴대폰 번호를 입력하고 <span class="ui">Continue</span>.</li>
+          <li><span class="ui">Add payment verification method</span> → <span class="ui">Credit Card</span>에서 카드를 등록합니다. 카드 정보는 오라클 화면에 본인이 직접 입력합니다.
+            <ul>
+              <li>Visa · Mastercard 등 <b>해외 결제가 되는 신용카드</b>가 가장 무난합니다. 체크카드도 되지만 거절되는 경우가 있고, 선불 · 가상 카드는 받지 않습니다.</li>
+              <li>본인 확인을 위해 소액이 잠깐 승인됐다가 자동으로 취소됩니다. 유료 전환을 직접 하지 않는 한 실제 청구는 없습니다.</li>
+            </ul></li>
+          <li>약관에 동의하고 <span class="ui">Start my free trial</span>을 누릅니다. 계정이 준비되면 콘솔(관리 화면)으로 넘어가거나 완료 메일이 옵니다. 몇 분 걸릴 수 있습니다.</li>
+        </ol>
+        <h4>다음부터 로그인하려면</h4>
+        <ul class="sub">
+          <li><a href="https://cloud.oracle.com" target="_blank" rel="noopener">cloud.oracle.com</a> → <b>Cloud Account Name</b> 입력 → <span class="ui">Next</span> → 이메일과 비밀번호.</li>
+          <li>처음 로그인할 때 2단계 인증 등록을 요구하면, 화면 안내대로 휴대폰에 인증 앱(Oracle Mobile Authenticator)을 설치해 QR을 찍으면 됩니다.</li>
+          <li>메뉴가 한글로 나오면 오른쪽 위 <b>지구본 아이콘 → English</b>로 바꾸세요. 아래 설명의 버튼 이름과 똑같아져 따라 하기 쉽습니다.</li>
+        </ul>
+        <p class="note" style="margin-top:8px">가입 첫 30일은 체험 크레딧이 함께 제공됩니다. 30일이 지나도 무료 등급 서버는 그대로 유지됩니다.</p>
+      </li>
+
+      <li id="s3">
+        <h3>서버(인스턴스) 만들기 <span class="time">약 10분</span></h3>
+        <ol class="do">
+          <li>콘솔 왼쪽 위 <b>☰ 메뉴</b> → <span class="path">Compute → Instances</span> → <span class="ui">Create instance</span>.</li>
+          <li><b>Name</b>에 <code class="in">toss-proxy</code>처럼 알아볼 이름을 적습니다.</li>
+          <li><b>Image and shape</b>에서 운영체제를 바꿉니다: <span class="ui">Change image</span> → <b>Ubuntu</b> → <span class="ui">Canonical Ubuntu 24.04</span> 선택 → <span class="ui">Select image</span>.
+            <ul><li>이름 뒤에 <b>Minimal</b>이나 <b>aarch64</b>가 붙지 않은 것을 고르세요.</li></ul></li>
+          <li>바로 아래에서 서버 크기를 고릅니다: <span class="ui">Change shape</span> → <b>Virtual machine</b> → <span class="ui">Specialty and previous generation</span> → <span class="ui">VM.Standard.E2.1.Micro</span> 선택 → <span class="ui">Select shape</span>.
+            <ul><li><b>Always Free-eligible</b> 표시가 붙어 있는지 확인하세요. 이 표시가 있는 것이 무료입니다.</li></ul></li>
+          <li><span class="ui">Next</span>. <b>Security</b> 화면은 건드리지 않고 다시 <span class="ui">Next</span>.</li>
+          <li><b>Networking</b> 화면에서 아래 세 가지를 확인합니다.
+            <ul>
+              <li><span class="ui">Create new virtual cloud network</span>과 <span class="ui">Create new public subnet</span>이 선택되어 있을 것 (처음이면 기본값입니다)</li>
+              <li><span class="ui">Automatically assign public IPv4 address</span>가 <b>켜져</b> 있을 것</li>
+              <li><b>Add SSH keys</b>에서 <span class="ui">Generate a key pair for me</span>를 고르고 <span class="ui">Download private key</span>(또는 Save private key)를 눌러 <b>키 파일을 내려받을 것</b></li>
+            </ul>
+            <div class="tip"><b>키 파일(<code class="in">ssh-key-날짜.key</code>)은 이때 한 번만 받을 수 있습니다.</b> 서버에 들어가는 열쇠이니 <b>다운로드 폴더에 그대로</b> 두고, 지우거나 남에게 보내지 마세요.
+              Mac에서 더블클릭하면 Keynote가 열리는데, 열 필요 없는 파일이니 그냥 닫으면 됩니다.</div></li>
+          <li><span class="ui">Next</span> → <b>Storage</b> 화면도 그대로 <span class="ui">Next</span> → <b>Review</b>에서 <span class="ui">Create</span>.</li>
+          <li>1~2분 뒤 상태가 주황색 <b>Provisioning</b>에서 초록색 <b>Running</b>으로 바뀝니다. 같은 화면의 <b>Public IP address</b>(예: 152.67.200.10)가 <b>내 서버 IP</b>입니다. 메모해 두세요.</li>
+        </ol>
+        <details>
+          <summary>"Out of capacity" 오류가 나오면</summary>
+          <p>그 지역에 무료 서버 자리가 잠깐 없다는 뜻입니다. 몇 시간 뒤 다시 시도하면 대부분 됩니다.
+            급하면 4번에서 <span class="ui">Ampere</span> → <span class="ui">VM.Standard.A1.Flex</span>(OCPU 1, 메모리 6GB)를 골라 보세요. 이것도 Always Free-eligible 표시가 있는 무료 범위입니다.</p>
+        </details>
+        <details>
+          <summary>IP는 안 바뀌나요? (선택: 예약 IP로 바꾸기)</summary>
+          <p>오라클은 서버를 껐다 켜도 IP가 그대로이고, <b>인스턴스를 삭제(Terminate)할 때만</b> 사라집니다. 그래서 그대로 써도 됩니다.</p>
+          <p>나중에 서버를 새로 만들어도 같은 IP를 쓰고 싶다면 예약 IP(Reserved public IP)로 바꿔 둘 수 있습니다. <b>바꾸면 IP가 달라지므로 반드시 6단계 설치 전에</b> 하세요.</p>
+          <ol class="do">
+            <li>인스턴스 화면 <span class="path">Networking 탭 → Attached VNICs</span>에서 VNIC 이름을 누릅니다.</li>
+            <li><span class="path">IP administration 탭</span> → 주소 줄 오른쪽 <b>⋯</b> → <span class="ui">Edit</span> → Public IP type을 <span class="ui">No public IP</span>로 바꾸고 <span class="ui">Update</span>.</li>
+            <li>다시 <b>⋯</b> → <span class="ui">Edit</span> → <span class="ui">Reserved public IP</span> → <span class="ui">Create new Reserved IP Address</span> → 이름을 적고 <span class="ui">Update</span>.</li>
+            <li>새로 표시된 주소가 내 서버 IP입니다.</li>
+          </ol>
+        </details>
+      </li>
+
+      <li id="s4">
+        <h3>방화벽 열기 (80 · 443번 문) <span class="time">약 5분</span></h3>
+        <p>새 서버는 바깥에서 들어오는 문이 거의 다 닫혀 있습니다. 내 휴대폰·PC가 서버에 접속할 수 있도록 <b>웹용 문 두 개(80, 443)</b>를 엽니다.</p>
+        <ol class="do">
+          <li><b>☰ 메뉴</b> → <span class="path">Networking → Virtual cloud networks</span> → 방금 만들어진 <b>vcn-…</b> 이름을 누릅니다.</li>
+          <li><span class="path">Security 탭</span>(화면에 따라 왼쪽 Resources 목록)의 <b>Security Lists</b>에서 <span class="ui">Default Security List for vcn-…</span>을 누릅니다.</li>
+          <li><span class="path">Security rules 탭</span> → <span class="ui">Add Ingress Rules</span>.</li>
+          <li>아래처럼 입력합니다. 적지 않은 칸은 그대로 둡니다.
+            <table style="margin:6px 0">
+              <tr><th>Source CIDR</th><td><code class="in">0.0.0.0/0</code></td></tr>
+              <tr><th>IP Protocol</th><td>TCP</td></tr>
+              <tr><th>Destination Port Range</th><td><code class="in">80</code></td></tr>
+            </table></li>
+          <li><span class="ui">+ Another Ingress Rule</span>을 눌러 한 줄 더 만들고, 같은 값에 Destination Port Range만 <code class="in">443</code>으로 적습니다.</li>
+          <li>아래쪽 <span class="ui">Add Ingress Rules</span>를 눌러 저장합니다. 목록에 80과 443 두 줄이 보이면 끝입니다.</li>
+        </ol>
+        <p class="note" style="margin-top:8px"><b>Source Port Range</b>는 비워 두세요. 80·443은 Destination 칸에 적습니다. 서버 안쪽 방화벽은 6단계 설치 프로그램이 알아서 엽니다.</p>
+      </li>
+
+      <li id="s5">
+        <h3>내 PC에서 서버에 접속하기 <span class="time">약 5분</span></h3>
+        <p>이제 서버에 들어가 명령어를 입력할 차례입니다. 서버에는 화면이 없어서, 내 PC의 <b>터미널</b>이라는 창으로 들어갑니다.</p>
+        <div class="ipbox">
+          <label for="ip">3단계에서 메모한 서버 IP를 여기에 입력하세요</label>
+          <input id="ip" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="예: 152.67.200.10">
+          <div class="hint" id="ip-hint">입력하면 아래 명령어에 자동으로 들어갑니다. 이 칸의 값은 어디로도 전송되지 않습니다.</div>
+        </div>
+
+        <div class="os">
+          <h4>Mac</h4>
+          <ol class="do">
+            <li><kbd>⌘</kbd> + <kbd>Space</kbd> → <b>터미널</b> 입력 → <kbd>Enter</kbd>.</li>
+            <li>아래 두 줄을 차례로 복사해 붙여넣고(<kbd>⌘</kbd>+<kbd>V</kbd>) 각각 <kbd>Enter</kbd>를 누릅니다. 첫 줄은 아무 반응이 없는 게 정상입니다.</li>
+          </ol>
+          <div class="cmd"><code>chmod 400 ~/Downloads/ssh-key-*.key</code><button type="button">복사</button></div>
+          <div class="cmd"><code>ssh -i ~/Downloads/ssh-key-*.key ubuntu@<span class="ph" data-ip="dot">서버IP</span></code><button type="button">복사</button></div>
+        </div>
+        <div class="os">
+          <h4>Windows 10 · 11</h4>
+          <ol class="do">
+            <li><b>시작</b> 버튼 → <b>PowerShell</b> 입력 → <b>Windows PowerShell</b>을 엽니다.</li>
+            <li>아래 한 줄을 복사해 붙여넣고(창 안에서 <b>마우스 오른쪽 클릭</b>) <kbd>Enter</kbd>를 누릅니다.</li>
+          </ol>
+          <div class="cmd"><code>ssh -i (Resolve-Path $HOME\Downloads\ssh-key-*.key) ubuntu@<span class="ph" data-ip="dot">서버IP</span></code><button type="button">복사</button></div>
+        </div>
+        <ul class="sub">
+          <li>처음 접속하면 <code class="in">Are you sure you want to continue connecting (yes/no)?</code>라고 묻습니다. <code class="in">yes</code>를 입력하고 <kbd>Enter</kbd>.</li>
+          <li>이 명령어는 다운로드 폴더에 키 파일이 <b>하나만</b> 있다고 가정합니다. 여러 번 받았다면 하나만 남기세요.</li>
+        </ul>
+        <div class="done">맨 아랫줄이 <b><code class="in">ubuntu@toss-proxy:~$</code></b> 처럼 바뀌면 서버 안에 들어온 것입니다. 지금부터 입력하는 명령은 내 PC가 아니라 서버에서 실행됩니다.</div>
+      </li>
+
+      <li id="s6">
+        <h3>프록시 설치 <span class="time">약 5분</span></h3>
+        <p>서버에 접속한 그 창에서 아래 두 줄을 차례로 붙여넣고 <kbd>Enter</kbd>를 누릅니다.</p>
         <div class="cmd"><code>curl -fsSLO https://raw.githubusercontent.com/nowjay/quant-stock-dashboard/main/tools/server/setup.sh</code><button type="button">복사</button></div>
         <div class="cmd"><code>sudo bash setup.sh</code><button type="button">복사</button></div>
+        <p>설치가 진행되다가 네 가지를 물어봅니다. 이렇게 답하세요.</p>
+        <table class="qa">
+          <tr><th><code class="in">client_id:</code></th><td>1단계에서 복사해 둔 client_id를 붙여넣고 <kbd>Enter</kbd></td></tr>
+          <tr><th><code class="in">client_secret:</code></th><td>client_secret을 붙여넣고 <kbd>Enter</kbd>. <b>붙여넣어도 화면에 아무것도 안 보이는 게 정상</b>입니다. 한 번만 붙여넣으세요.</td></tr>
+          <tr><th><code class="in">대시보드 주소 […]:</code></th><td>아무것도 적지 말고 <kbd>Enter</kbd></td></tr>
+          <tr><th><code class="in">프록시 도메인 […]:</code></th><td>아무것도 적지 말고 <kbd>Enter</kbd></td></tr>
+        </table>
+        <p style="margin-top:10px">몇 분 뒤 아래와 비슷한 화면이 나오면 설치가 끝난 것입니다. <b>노란색으로 표시한 세 가지</b>를 다음 단계에서 씁니다.</p>
+<pre class="term" aria-label="설치 완료 화면 예시"><span class="dim">  프록시 실행 중 ✓
+  HTTPS 인증서 · 접속 확인 ✓</span>
+
+ 남은 설정
+   1) 토스증권 WTS > 설정 > Open API > 허용 IP 관리에 등록:   <mark>152.67.200.10</mark>
+   …
+      연결 링크  <mark>https://nowjay.github.io/quant-stock-dashboard/#toss=https://152-67-200-10.sslip.io&amp;key=AbCd…</mark>
+
+      (직접 입력: 톱니 → 토스증권 Open API → 프록시 주소 https://152-67-200-10.sslip.io · 접속 키 AbCd…)
+
+   <mark>█▀▀▀▀▀█ ▄▀ ▄ █▀▀▀▀▀█   ← QR 코드</mark></pre>
         <ul class="sub">
-          <li>client_id, client_secret을 물어보면 붙여넣습니다. secret은 입력해도 화면에 보이지 않는 게 정상입니다.</li>
-          <li>나머지 질문은 <b>Enter</b>로 기본값을 쓰면 됩니다. 키는 내 서버에만 저장됩니다.</li>
-          <li>끝나면 <b>서버 IP · 연결 링크 · QR 코드</b>가 나옵니다.</li>
+          <li><b>접속 키(프록시 키)</b>는 이때 자동으로 만들어져 연결 링크와 QR 코드 안에 들어 있습니다. 따로 만들 것이 없습니다.</li>
+          <li>토스 키와 접속 키는 <b>내 서버 안에만</b> 저장됩니다.</li>
+          <li>창을 닫아도 프록시는 서버에서 계속 돌아갑니다. 다만 <b>8단계를 마칠 때까지는 이 창을 닫지 마세요.</b> 닫았다면 5단계로 다시 접속해 <code class="in">sudo bash setup.sh</code>를 실행하면 링크와 QR이 다시 나옵니다(키는 다시 묻지 않습니다).</li>
+          <li><code class="in">⚠️ 아직 https://… 에 접속되지 않습니다</code>가 나오면 4단계의 80 · 443 규칙을 확인한 뒤 <code class="in">sudo bash setup.sh</code>를 다시 실행하세요.</li>
         </ul>
       </li>
-      <li>
-        <h3>허용 IP 등록</h3>
-        <p>설치 끝에 나온 <b>서버 IP</b>를 토스증권 WTS <span class="path">설정 → Open API → 허용 IP 관리</span>에 등록합니다.</p>
+
+      <li id="s7">
+        <h3>토스증권에 허용 IP 등록 <span class="time">약 2분</span></h3>
+        <p>토스증권 WTS <span class="path">설정 → Open API → 허용 IP 관리</span>에 <b>내 서버 IP</b>(설치 끝 화면의 1번 줄)를 등록합니다.</p>
+        <ul class="sub"><li>내 집이나 휴대폰의 IP가 아니라 <b>서버 IP</b>를 넣어야 합니다. 이후 어떤 기기로 접속하든 토스증권에는 서버가 대신 요청합니다.</li></ul>
       </li>
-      <li>
-        <h3>기기마다 연결</h3>
-        <p>휴대폰은 <b>QR 코드를 찍고</b>, PC는 <b>연결 링크</b>를 엽니다. 설정창에 주소와 접속 키가 채워져 있으면 주소가 내 서버인지 확인하고 <b>연결하기</b>를 누르세요.</p>
-        <ul class="sub"><li>직접 입력하려면: 대시보드 우상단 톱니 → 데이터 소스 <b>토스증권 Open API</b> → 프록시 주소와 접속 키 입력</li></ul>
+
+      <li id="s8">
+        <h3>기기마다 연결 <span class="time">기기당 1분</span></h3>
+        <h4>휴대폰</h4>
+        <p>카메라로 터미널 화면의 <b>QR 코드</b>를 찍어 링크를 엽니다.</p>
+        <h4>PC</h4>
+        <p>터미널에서 <b>연결 링크</b>(<code class="in">https://</code>부터 끝까지)를 마우스로 드래그해 복사한 뒤 브라우저 주소창에 붙여넣습니다.</p>
+        <ul class="sub">
+          <li>터미널에서 복사하기 — Mac: 드래그 후 <kbd>⌘</kbd>+<kbd>C</kbd> · Windows: 드래그 후 <b>마우스 오른쪽 클릭</b></li>
+        </ul>
+        <h4>그다음</h4>
+        <p>대시보드가 열리면서 설정창에 주소와 접속 키가 채워져 있습니다. 주소가 내 서버(<code class="in">https://<span data-ip="dash">서버-IP</span>.sslip.io</code>)인지 확인하고 <span class="ui">연결하기</span>를 누르세요.</p>
         <div class="ok"><span class="pill live">실시간</span><span class="pill src">토스증권 일봉</span></div>
-        <p class="note">화면 우상단에 <b>실시간</b>, 종목 이름 옆에 <b>토스증권 일봉</b>이 보이면 연결된 것입니다.</p>
+        <p class="note">화면 우상단에 <b>실시간</b>, 종목 이름 옆에 <b>토스증권 일봉</b>이 보이면 연결된 것입니다. 키는 그 브라우저에만 저장되므로 기기마다 한 번씩 해 주세요.</p>
+        <details>
+          <summary>링크 없이 직접 입력하려면</summary>
+          <ol class="do">
+            <li>대시보드 우상단 <b>톱니</b> 아이콘 → 데이터 소스를 <span class="ui">토스증권 Open API — 실시간 주가</span>로 바꿉니다.</li>
+            <li><b>프록시 주소</b>에 <code class="in">https://<span data-ip="dash">서버-IP</span>.sslip.io</code>를 적습니다 (서버 IP의 점을 하이픈으로 바꾼 주소).</li>
+            <li><b>프록시 접속 키</b>에 설치 끝 화면의 "접속 키" 뒤 글자를 그대로 붙여넣고 <span class="ui">연결하기</span>.</li>
+          </ol>
+        </details>
       </li>
     </ol>
   </section>
 
   <section class="card">
+    <h2>설치한 뒤 알아둘 것</h2>
+    <ul class="sub" style="margin-top:0">
+      <li><b>서버는 그대로 켜 두면 됩니다.</b> 내 PC를 끄거나 터미널 창을 닫아도 서버는 계속 돌아갑니다.</li>
+      <li><b>키 파일(<code class="in">ssh-key-….key</code>)은 보관하세요.</b> 나중에 서버에 다시 들어갈 때 필요합니다. 잃어버리면 서버를 새로 만들어야 합니다.</li>
+      <li><b>오라클이 서버를 멈출 수 있습니다.</b> 무료 등급은 오랫동안 거의 쓰이지 않는 서버를 오라클이 회수할 수 있다고 안내합니다.
+        어느 날 연결이 안 되면 콘솔 <span class="path">Compute → Instances</span>에서 상태를 보고, <b>Stopped</b>면 인스턴스를 눌러 <span class="ui">Start</span>를 누르세요. IP는 그대로이고 프록시도 자동으로 다시 켜집니다.</li>
+      <li><b>요금</b> — Always Free-eligible 서버 1대만 쓰고 콘솔의 <b>Upgrade</b>를 누르지 않으면 청구되지 않습니다.</li>
+      <li><b>그만 쓰려면</b> — 콘솔에서 인스턴스를 <span class="ui">Terminate</span>하고, 토스증권 WTS에서 허용 IP를 지우면 됩니다.</li>
+    </ul>
+    <details>
+      <summary>AWS Lightsail(유료)로 하려면</summary>
+      <p>2~5단계 대신 아래처럼 서버를 만들고, 6단계부터 똑같이 진행합니다.</p>
+      <ul class="sub">
+        <li>리전 <b>서울</b>, Linux/Unix, <b>OS 전용 → Ubuntu 24.04</b>, IPv4가 포함된 가장 작은 플랜으로 생성</li>
+        <li><span class="path">네트워킹</span> 탭에서 <b>고정 IP 생성 · 연결</b>, IPv4 방화벽에 <b>HTTPS(443)</b> 추가 — 고정 IP를 연결한 <b>뒤에</b> 설치하세요</li>
+        <li>인스턴스의 <span class="path">SSH로 연결</span> 버튼을 누르면 브라우저에서 바로 터미널이 열립니다 (키 파일 불필요)</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="card">
     <h2>안 될 때</h2>
     <table>
-      <tr><th>"허용 IP 가 아닙니다"</th><td>4단계에서 등록한 IP가 설치 끝에 나온 서버 IP와 같은지 확인하세요. 서버에 고정 IP를 연결하기 전에 설치했다면 IP가 바뀌었을 수 있습니다.</td></tr>
-      <tr><th>"client_id / client_secret 이 틀렸습니다"</th><td>서버에서 <code class="in">sudo rm /opt/toss-proxy/.env</code> 후 <code class="in">sudo bash setup.sh</code>를 다시 실행해 복사 버튼으로 붙여넣으세요.</td></tr>
-      <tr><th>"프록시에 연결할 수 없습니다"</th><td>클라우드 콘솔 방화벽에서 TCP 80·443이 열려 있는지 확인하세요. 인증서 로그: <code class="in">sudo journalctl -u caddy -n 30</code></td></tr>
+      <tr><th>오라클 가입에서 카드가 거절됨</th><td>VPN을 끄고, 카드 명의와 같은 이름 · 주소로 다시 시도하세요. 체크카드가 안 되면 해외 결제가 되는 신용카드로 바꿔 보세요.</td></tr>
+      <tr><th>ssh 접속이 한참 멈춰 있다가 "timed out"</th><td>서버 IP를 잘못 적었거나 인스턴스가 아직 <b>Running</b>이 아닙니다. 콘솔에서 상태와 Public IP address를 다시 확인하세요.</td></tr>
+      <tr><th>"Permission denied (publickey)"</th><td>명령어의 <code class="in">ubuntu@</code>를 지우지 않았는지, 다운로드 폴더의 키 파일이 이 서버를 만들 때 받은 것인지 확인하세요.</td></tr>
+      <tr><th>"UNPROTECTED PRIVATE KEY FILE" / "too open"</th><td>Mac은 5단계 첫 줄(<code class="in">chmod 400 …</code>)을 먼저 실행하세요. Windows는 PowerShell에서
+        <code class="in">icacls (Resolve-Path $HOME\Downloads\ssh-key-*.key) /inheritance:r /grant:r "$($env:USERNAME):R"</code>을 실행한 뒤 다시 접속하세요.</td></tr>
+      <tr><th>"허용 IP 가 아닙니다"</th><td>7단계에서 등록한 IP가 설치 끝에 나온 서버 IP와 같은지 확인하세요. 설치한 뒤에 예약 IP로 바꿨다면 IP가 달라졌습니다 —
+        서버에서 <code class="in">sudo rm /etc/caddy/Caddyfile</code> 후 <code class="in">sudo bash setup.sh</code>를 다시 실행하고, 새 IP를 토스증권에 등록한 뒤 새 링크로 연결하세요.</td></tr>
+      <tr><th>"client_id / client_secret 이 틀렸습니다"</th><td>서버에서 <code class="in">sudo rm /opt/toss-proxy/.env</code> 후 <code class="in">sudo bash setup.sh</code>를 다시 실행해 복사 버튼으로 붙여넣으세요. 접속 키가 새로 만들어지므로 기기마다 새 링크로 다시 연결합니다.</td></tr>
+      <tr><th>"프록시에 연결할 수 없습니다"</th><td>4단계의 80 · 443 규칙이 <b>Ingress</b>에, <b>Destination Port Range</b>로 들어가 있는지 확인하세요. 인스턴스가 Stopped면 Start를 누르세요. 인증서 로그: <code class="in">sudo journalctl -u caddy -n 30</code></td></tr>
       <tr><th>"접속 키가 틀렸습니다"</th><td>연결 링크를 다시 열거나, 서버에서 <code class="in">sudo bash setup.sh</code>를 다시 실행하면 링크가 다시 나옵니다.</td></tr>
       <tr><th>서버 로그에 "토큰이 무효화됐습니다"</th><td>같은 키로 프록시를 두 곳(예: 내 PC와 서버)에서 돌리고 있습니다. 토큰은 계정당 1개라 한 곳만 켜 두세요.</td></tr>
-      <tr><th>그 밖의 문제</th><td>서버에서 <code class="in">sudo journalctl -u toss-proxy -f</code>로 로그를 확인하세요.</td></tr>
+      <tr><th>그 밖의 문제</th><td>서버에서 <code class="in">sudo journalctl -u toss-proxy -f</code>로 로그를 확인하세요. (<kbd>Ctrl</kbd>+<kbd>C</kbd>로 빠져나옵니다)</td></tr>
     </table>
   </section>
 
@@ -148,17 +412,35 @@
     <b>접속 키와 연결 링크는 비밀번호입니다.</b>
     <ul>
       <li>다른 사람에게 보내지 마세요. 공유하면 내 토스 데이터를 남에게 주는 셈이 되어 약관 위반입니다. 친구는 이 안내대로 자기 키를 만들면 됩니다.</li>
+      <li>설치 끝 화면을 캡처해 메신저나 SNS에 올리지 마세요. 링크와 QR에 접속 키가 들어 있습니다.</li>
       <li>프록시는 시세 조회만 중계하고 <b>주문·계좌 API는 막혀 있어</b>, 키가 새더라도 주문은 할 수 없습니다.</li>
       <li>시세는 서버나 이 사이트에 저장되지 않고 내 브라우저에만 표시됩니다.</li>
     </ul>
   </div>
 </main>
 <script>
+  // 서버 IP 를 입력하면 명령어와 프록시 주소 예시에 채운다 (전송 · 저장하지 않음)
+  var ipInput = document.getElementById('ip'), ipHint = document.getElementById('ip-hint');
+  var ipHintText = ipHint.textContent;
+  function validIp(v) {
+    return /^(\d{1,3})(\.\d{1,3}){3}$/.test(v) && v.split('.').every(function (n) { return +n <= 255; });
+  }
+  ipInput.addEventListener('input', function () {
+    var v = ipInput.value.trim(), ok = validIp(v);
+    document.querySelectorAll('[data-ip]').forEach(function (el) {
+      var dash = el.dataset.ip === 'dash';
+      el.textContent = ok ? (dash ? v.replace(/\./g, '-') : v) : (dash ? '서버-IP' : '서버IP');
+      el.classList.toggle('filled', ok);
+    });
+    ipHint.classList.toggle('bad', !!v && !ok);
+    ipHint.textContent = v && !ok ? '숫자 네 묶음을 점으로 이은 형식이어야 합니다 (예: 152.67.200.10)' : ipHintText;
+  });
   document.querySelectorAll('.cmd button').forEach(function (b) {
     b.addEventListener('click', function () {
-      var text = b.previousElementSibling.textContent;
-      var done = function () { b.textContent = '복사됨'; setTimeout(function () { b.textContent = '복사'; }, 1500); };
-      try { navigator.clipboard.writeText(text).then(done, function () {}); } catch (e) {}
+      var code = b.previousElementSibling;
+      var flash = function (msg) { b.textContent = msg; setTimeout(function () { b.textContent = '복사'; }, 1500); };
+      if (code.querySelector('[data-ip]:not(.filled)')) { flash('IP 먼저 입력'); ipInput.focus(); return; }
+      try { navigator.clipboard.writeText(code.textContent).then(function () { flash('복사됨'); }, function () {}); } catch (e) {}
     });
   });
 </script>
