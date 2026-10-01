@@ -942,7 +942,10 @@ body[data-view="stock"] .home{display:none}
 .mi-c em{font-style:normal;font-weight:600}
 .mi-x{font-size:10.5px;color:var(--muted);font-weight:600;margin-top:3px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mi-x b{color:var(--ink-2);font-weight:700}
-.mi-tile .spk{width:100%;height:28px;margin-top:7px}
+/* 그래프 기간과 그 기간의 변동 (전광판의 '그래프 기간' 버튼과 연동) */
+.mi-r{display:flex;justify-content:space-between;align-items:baseline;gap:6px;width:100%;margin-top:6px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.mi-r small{font-size:10px;font-weight:600;color:var(--faint)}
+.mi-tile .spk{width:100%;height:28px;margin-top:3px}
 
 /* ---------- ③ 공포 & 탐욕 · 국장 심리지수 ---------- */
 .fg-card{padding-bottom:16px}
