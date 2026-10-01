@@ -4,13 +4,15 @@
    산정 절차 (항상 일봉 기준 — 기간이 달력 기준이므로)
      1) 후보 레벨 수집
         52주 신고가/신저가 · MA50/MA200 박스 상·하단 · 볼린저 상한선 ·
-        피봇 R1/R2(일간 · 주간 5봉 · 월간 21봉) · 전고점/전저점(스윙) ·
+        피봇 R1/R2(일간 · 주간 · 월간 — 직전에 끝난 거래일 · 달력 주 · 달력 월 기준) · 전고점/전저점(스윙) ·
         피보나치 되돌림/확장(52주 주파동 + 이후 조정/반등 파동)
      2) 도달 예상 지점 = 현재가 + σ√기간 × (a + b × 추세편향)
         σ: 실현 변동성(60·120봉 혼합), 추세편향: 단기/중기 점수(−1~+1)
      3) 앵커링 — 도달 예상 지점 근처의 가장 유력한 기술적 레벨을 목표가로 채택
         (근처에 레벨이 없으면 변동성 투영값 사용)
      4) 손절가 — 의미 있는 지지선 아래 ATR 버퍼, 없으면 ATR 배수
+     5) 도달확률 — 표본 표준편차(120봉 · 20봉 혼합)로 계산. 목표가 위치에 쓰는 σ(이상치를 누른 MAD 기반)는
+        실제 변동성보다 작아서, 그 값으로 확률을 내면 먼 목표의 도달확률이 실제의 절반 수준으로 나온다
 
    목표가 < 현재가 는 뚜렷한 하락 편향일 때 Bear 시나리오에서만 허용합니다.
    ============================================================= */
@@ -47,8 +49,10 @@ window.QT = window.QT || {};
     const e = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x / 2);
     return 0.5 * (1 + (x >= 0 ? e : -e));
   }
-  /* 기간 내 한 번이라도 도달할 확률 (무추세 랜덤워크 · 반사 원리) */
-  function touchProb(dist, em){ return em > 0 ? clamp(2 * (1 - phi(Math.abs(dist) / em)), 0.01, 0.99) : null; }
+  /* 기간 내 한 번이라도 도달할 확률 (무추세 랜덤워크 · 반사 원리) — 거리와 변동성 모두 로그 수익률 기준 */
+  function touchProb(v, price, sd){
+    return sd > 0 && v > 0 && price > 0 ? clamp(2 * (1 - phi(Math.abs(Math.log(v / price)) / sd)), 0.01, 0.99) : null;
+  }
   function range(bars, from, to){                      // [from, to)
     let h = -Infinity, l = Infinity, hi = -1, li = -1;
     for (let i = Math.max(0, from); i < Math.min(bars.length, to); i++){
@@ -167,7 +171,8 @@ window.QT = window.QT || {};
     return best;
   }
 
-  function scenarioSet(price, em, bias, cands, round, minBase){
+  /** @param sdP 기간 로그 수익률의 표준편차 (도달확률용) */
+  function scenarioSet(price, em, bias, cands, round, minBase, sdP){
     const R = {};
     Object.keys(REACH).forEach(function (k) { R[k] = price + em * (REACH[k][0] + REACH[k][1] * bias); });
     const up = cands.filter(function (c) { return c.v > price; });
@@ -194,7 +199,7 @@ window.QT = window.QT || {};
     let bear = mk(c, Math.max(bearR, bearLo + em * 0.02));
     if (bear.v >= base.v) bear = mk(null, (price + base.v) / 2);
 
-    [bear, base, bull].forEach(function (s) { s.pct = pctOf(s.v, price); s.prob = touchProb(s.v - price, em); });
+    [bear, base, bull].forEach(function (s) { s.pct = pctOf(s.v, price); s.prob = touchProb(s.v, price, sdP); });
     return { bear:bear, base:base, bull:bull, reach:R };
   }
 
@@ -245,13 +250,21 @@ window.QT = window.QT || {};
     const sigma = clamp(Math.sqrt(0.5 * sMad * sMad + 0.5 * s20 * s20) || (d.atr / price * 0.7), 0.005, 0.05);
     const atr = d.atr;
     const em = { short: price * sigma * Math.sqrt(HORIZON.short.days), mid: price * sigma * Math.sqrt(HORIZON.mid.days) };
+    /* 도달확률용 σ — 절단하지 않은 표본 표준편차 (120봉과 최근 20봉을 절반씩).
+       위 · 아래 같은 거리의 실제 도달률 평균과 맞는지 과거 데이터로 확인한 값이다 */
+    const rl = [];
+    for (let i = Math.max(1, n - 120); i < n; i++) if (ind.close[i - 1] > 0) rl.push(Math.log(ind.close[i] / ind.close[i - 1]));
+    const sL = sd(rl), sS = sd(rl.slice(-20));
+    const sigmaP = clamp(Math.sqrt(0.5 * sL * sL + 0.5 * sS * sS) || sigma, sigma, 0.15);
+    const sdP = { short: sigmaP * Math.sqrt(HORIZON.short.days), mid: sigmaP * Math.sqrt(HORIZON.mid.days) };
     const bias = { short: clamp(d.shortScore / 4.5, -1, 1), mid: clamp(d.midScore / 5, -1, 1) };
 
-    /* ---- 레벨 ---- */
-    const prev = bars[n - 2] || bars[n - 1];
-    const pd = pivots(prev.h, prev.l, prev.c);
-    const wk = range(bars, n - 6, n - 1), pw = pivots(wk.h, wk.l, prev.c);
-    const mo = range(bars, n - 22, n - 1), pm = pivots(mo.h, mo.l, prev.c);
+    /* ---- 레벨 ----
+       피봇은 끝난 봉으로 다음 거래일 · 주 · 월의 선을 만든다 (analysis.js 의 피봇과 같은 기준).
+       주간 · 월간은 직전에 끝난 달력 주 · 월 — 받은 일봉이 짧아 없으면 그 레벨은 뺀다 */
+    const pd = d.pivot;
+    const wk = I.prevPeriod(bars, '1W', d.open), pw = wk ? pivots(wk.h, wk.l, wk.c) : {};
+    const mo = I.prevPeriod(bars, '1M', d.open), pm = mo ? pivots(mo.h, mo.l, mo.c) : {};
     const hi20 = range(bars, n - 20, n), hi60 = range(bars, n - 60, n);
     const wave = waveOf(bars, price);
     const hi52 = wave ? wave.hi52 : hi60.h, lo52 = wave ? wave.lo52 : hi60.l;
@@ -296,13 +309,13 @@ window.QT = window.QT || {};
     function far(list){ return list.filter(function (c) { return Math.abs(c.v - price) >= atr * 0.25; }); }
     const sc = far(shortC), mc = far(midC);
 
-    const short = scenarioSet(price, em.short, bias.short, sc, round);
-    const mid = scenarioSet(price, em.mid, bias.mid, mc, round, short.base.v + em.mid * 0.12);
+    const short = scenarioSet(price, em.short, bias.short, sc, round, 0, sdP.short);
+    const mid = scenarioSet(price, em.mid, bias.mid, mc, round, short.base.v + em.mid * 0.12, sdP.mid);
     /* 중장기 Bull 도 단기보다 낮지 않게 */
     ['bull'].forEach(function (k) {
       if (mid[k].v < short[k].v){
         mid[k] = Object.assign({}, short[k]);
-        mid[k].pct = pctOf(mid[k].v, price); mid[k].prob = touchProb(mid[k].v - price, em.mid);
+        mid[k].pct = pctOf(mid[k].v, price); mid[k].prob = touchProb(mid[k].v, price, sdP.mid);
       }
     });
 
@@ -313,8 +326,10 @@ window.QT = window.QT || {};
     mid.stop = stopFrom(supM, price, Math.max(atr * 1.8, em.mid * 0.3), Math.max(atr * 6, em.mid), atr * 0.5, round,
       Math.max(atr * 3, em.mid * 0.55), 'ATR 3배 변동성 손절');
     if (mid.stop.v > short.stop.v) mid.stop = Object.assign({}, short.stop);
-    [short, mid].forEach(function (h) {
+    [[short, sdP.short], [mid, sdP.mid]].forEach(function (x) {
+      const h = x[0];
       h.stop.pct = pctOf(h.stop.v, price);
+      h.stop.prob = touchProb(h.stop.v, price, x[1]);    // 기간 안에 손절선을 건드릴 확률 (목표가와 같은 가정)
       const risk = price - h.stop.v;
       h.rr = risk > 0 ? (h.base.v - price) / risk : null;
     });
@@ -324,7 +339,7 @@ window.QT = window.QT || {};
     const supports = keySupports(supS.concat(supM.filter(function (c) { return c.label.indexOf('월간') < 0; })), price, atr, round);
 
     const t = {
-      price:price, cur:cur, sigma:sigma, atr:atr, atrPct:atr / price * 100,
+      price:price, cur:cur, sigma:sigma, sigmaP:sigmaP, atr:atr, atrPct:atr / price * 100,
       hi52:hi52, lo52:lo52, boxTop:boxTop, boxBot:boxBot, wave:wave,
       short:short, mid:mid, supports:supports
     };
@@ -421,11 +436,12 @@ window.QT = window.QT || {};
         : p < 20 ? { name:'볼린저 %B', tag:p.toFixed(0) + '% · 하단 근접', tone:'neut', html:'볼린저 하한선(' + fmt(d.bbLow) + ') 부근으로 지지 여부 확인이 필요합니다.' + squeeze }
         : { name:'볼린저 %B', tag:p.toFixed(0) + '% · 중심권', tone:'neut', html:'볼린저 밴드 중심권에서 등락 중이며 상한선은 ' + fmt(d.bbUp) + '입니다.' + squeeze });
     }
-    const v5 = [], v20 = [];
-    for (let i = Math.max(0, n - 20); i < n; i++){ if (bars[i].v > 0){ v20.push(bars[i].v); if (i >= n - 5) v5.push(bars[i].v); } }
+    /* 진행 중인 봉의 거래량은 하루치가 아니므로 끝난 봉까지만 비교한다 */
+    const v5 = [], v20 = [], ve = d.open ? n - 1 : n;
+    for (let i = Math.max(0, ve - 20); i < ve; i++){ if (bars[i].v > 0){ v20.push(bars[i].v); if (i >= ve - 5) v5.push(bars[i].v); } }
     if (v5.length && v20.length){
       const vr = (avg(v5) / avg(v20) - 1) * 100;
-      const ret5 = n > 6 ? pctOf(price, bars[n - 6].c) : 0;
+      const ret5 = ve > 5 ? pctOf(bars[ve - 1].c, bars[ve - 6].c) : 0;
       osc.push(vr > 25 && ret5 > 0 ? { name:'거래량', tag:'5일 ' + fmtPct(vr), tone:'bull', html:'5일 평균 거래량이 20일 평균보다 ' + fmtPct(vr) + ' 많고 주가도 올라 <b>수급이 개선</b>되고 있습니다.' }
         : vr > 25 ? { name:'거래량', tag:'5일 ' + fmtPct(vr), tone:'bear', html:'하락 구간에서 거래량이 ' + fmtPct(vr) + ' 늘어 매도 압력이 커졌습니다.' }
         : vr < -25 ? { name:'거래량', tag:'5일 ' + fmtPct(vr), tone:'neut', html:'거래량이 20일 평균보다 ' + fmtPct(vr) + ' 적어 추세의 신뢰도가 낮습니다.' }
@@ -440,8 +456,10 @@ window.QT = window.QT || {};
       risk.push({ tone:'caution', html:'52주 신고가 매물대(' + fmt(t.hi52) + ')가 단기 목표 구간 안에 있습니다. 돌파에 실패하면 Bull 시나리오는 무효입니다.' });
     if (d.align === 'down')
       risk.push({ tone:'caution', html:'이동평균선 역배열 — 반등이 나와도 ' + (fin(t.boxBot) ? fmt(t.boxBot) + ' 부근에서 ' : '') + '저항을 받을 수 있습니다.' });
-    if (t.sigma > 0.035)
-      risk.push({ tone:'caution', html:'일간 변동성 ' + (t.sigma * 100).toFixed(1) + '%로 높습니다. 비중을 줄이거나 손절폭을 여유 있게 잡으세요.' });
+    if (t.sigmaP > 0.04)
+      risk.push({ tone:'caution', html:'일간 변동성 ' + (t.sigmaP * 100).toFixed(1) + '%로 높습니다. 비중을 줄이거나 손절폭을 여유 있게 잡으세요.' });
+    if (fin(t.short.stop.prob) && t.short.stop.prob >= 0.6)
+      risk.push({ tone:'caution', html:'단기 손절선(' + fmt(t.short.stop.v) + ')은 평소 변동만으로도 2주 안에 닿을 확률이 약 ' + Math.round(t.short.stop.prob * 100) + '%입니다. 손절이 잦을 수 있어 비중을 작게 잡는 편이 안전합니다.' });
     if (t.short.rr != null && t.short.rr < 1)
       risk.push({ tone:'caution', html:'단기 손익비 1 : ' + t.short.rr.toFixed(2) + ' — 손절폭 대비 기대수익이 작아 신규 진입 매력이 낮습니다.' });
 

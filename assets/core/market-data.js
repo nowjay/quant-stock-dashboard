@@ -215,6 +215,35 @@ window.QT = window.QT || {};
     return us ? Date.UTC(y, m, d) : Date.UTC(y, m, d, 6, 30);
   }
 
+  /* ---------- 진행 중인 봉 ----------
+     마지막 봉이 아직 끝나지 않았는지 — 피봇(끝난 봉으로 다음 봉의 선을 만든다) · 거래량 비교 · 캔들 패턴은
+     끝난 봉으로만 계산해야 한다. 공공데이터 · 번들 일봉은 항상 끝난 봉이고, 실시간 체결이 붙은 오늘 봉만 진행 중이다.
+     국내 일봉 시각(15:30 KST)은 곧 정규장 마감 시각, 미국 일봉(0시 UTC)은 그날 16:00 뉴욕 시각에 끝난다. */
+  const NY_HOUR = new Intl.DateTimeFormat('en-US', { timeZone:'America/New_York', hour:'numeric', hourCycle:'h23' });
+  function closeTime(t, us){
+    if (!us) return t;
+    const at = t + 20 * 3600000;                       // 서머타임 16:00 · 표준시 15:00 (뉴욕)
+    return +NY_HOUR.format(new Date(at)) >= 16 ? at : at + 3600000;
+  }
+  /* 지금 열려 있거나 다음에 열릴 거래일의 일봉 시각 (휴장일은 모름 — 주말만 건너뜀) */
+  function sessionStamp(now, us){
+    let t = dayStamp(marketDay(now, us), us);
+    if (now >= closeTime(t, us)) t += 86400000;
+    while (new Date(t).getUTCDay() % 6 === 0) t += 86400000;
+    return t;
+  }
+  /** code 의 tf('1D' · '1W' · '1M') 마지막 봉이 진행 중인지 */
+  function barOpen(code, tf, now){
+    const st = BY_CODE[code];
+    if (!st || needsDaily(code)) return false;
+    const d = daily(code);
+    if (!d.length) return false;
+    const us = st.cur === 'USD', last = d[d.length - 1], t = now || Date.now();
+    if (t < closeTime(last.t, us)) return true;
+    if (tf !== '1W' && tf !== '1M') return false;
+    return bucketKey(sessionStamp(t, us), tf) === bucketKey(last.t, tf);   // 이번 주 · 달에 거래일이 더 남았다
+  }
+
   /* ---------- 실시간 틱 반영 ----------
      live: 증권사 실제 체결 — 체결 시각의 거래일로 봉을 고른다. 마지막 봉보다 새 거래일이면 봉을 새로 연다
            (공공데이터는 전 영업일까지만 있어서 오늘 체결을 어제 봉에 덮어쓰면 안 됨)
@@ -443,7 +472,7 @@ window.QT = window.QT || {};
   QT.Market = {
     UNIVERSE:UNIVERSE, BY_CODE:BY_CODE, QUOTES:QUOTES, TICK_SIZE:tick,
     init:init, daily:daily, series:series, aggregate:aggregate,
-    applyTick:applyTick, snapshot:snapshot, lightQuote:lightQuote, isReal:isReal, hasData:hasData, onLate:onLate,
+    applyTick:applyTick, snapshot:snapshot, lightQuote:lightQuote, isReal:isReal, hasData:hasData, onLate:onLate, barOpen:barOpen,
     setDaily:setDaily, realSource:realSource,
     hasKrx:hasKrx, isKrxTop:isKrxTop, needsDaily:needsDaily, ensureDaily:ensureDaily, ensureMany:ensureMany,
     appendDaily:appendDaily, krxMeta:krxMeta, setMinutes:setMinutes, minuteSource:minuteSource,

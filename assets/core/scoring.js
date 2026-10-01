@@ -33,9 +33,11 @@ window.QT = window.QT || {};
 
   /**
    * i 번째 봉 시점의 점수 (미래 데이터 사용 없음)
+   * @param opts.open  마지막 봉이 아직 진행 중 — 그 봉의 거래량은 하루(한 주 · 한 달)치가 아니므로
+   *                   거래량 그룹은 직전에 끝난 봉까지로 계산한다
    * @returns {score, regime, adx, trendStr, cats:{trend,momentum,volume}, comps:[{cat,key,name,v,value}]}
    */
-  function at(bars, ind, i){
+  function at(bars, ind, i, opts){
     const c = ind.close, p = c[i], comps = [];
     function add(cat, key, name, v, value){ if (fin(v)) comps.push({ cat:cat, key:key, name:name, v:clamp(v, -1, 1), value:value }); }
 
@@ -66,13 +68,14 @@ window.QT = window.QT || {};
     if (fin(c[i - 10])) add('momentum', 'mom', '10일 수익률', pct(p, c[i - 10]) / 6, pct(p, c[i - 10]));
 
     /* ---- 거래량 (거래량 데이터가 있을 때만) ---- */
+    const e = opts && opts.open && i === bars.length - 1 ? i - 1 : i;
     let v20 = 0, v5 = 0;
-    for (let j = i - 19; j <= i; j++) v20 += ind.vol[j] || 0;
-    for (let j = i - 4; j <= i; j++) v5 += ind.vol[j] || 0;
+    for (let j = e - 19; j <= e; j++) v20 += ind.vol[j] || 0;
+    for (let j = e - 4; j <= e; j++) v5 += ind.vol[j] || 0;
     v20 /= 20; v5 /= 5;
-    if (v20 > 0 && i >= 20){
-      add('volume', 'obv', 'OBV 추세', (ind.obv[i] - ind.obv[i - 20]) / (v20 * 20) * 2, ind.obv[i] - ind.obv[i - 20]);
-      const ratio = v5 / v20, r5 = fin(c[i - 5]) ? pct(p, c[i - 5]) : 0;
+    if (v20 > 0 && e >= 20){
+      add('volume', 'obv', 'OBV 추세', (ind.obv[e] - ind.obv[e - 20]) / (v20 * 20) * 2, ind.obv[e] - ind.obv[e - 20]);
+      const ratio = v5 / v20, r5 = fin(c[e - 5]) ? pct(c[e], c[e - 5]) : 0;
       add('volume', 'vr', '거래량 동반', ratio > 1.15 ? Math.sign(r5) * Math.min(1, ratio - 1) : 0, ratio);
     }
 

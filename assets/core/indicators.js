@@ -35,12 +35,14 @@ window.QT = window.QT || {};
     let g = 0, l = 0;
     for (let i = 1; i <= p; i++){ const d = a[i] - a[i - 1]; if (d >= 0) g += d; else l -= d; }
     g /= p; l /= p;
-    out[p] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+    /* 가격이 전혀 움직이지 않은 구간(거래정지 · 무거래)은 과매수(100)가 아니라 중립(50) */
+    const of = function () { return l === 0 ? (g === 0 ? 50 : 100) : 100 - 100 / (1 + g / l); };
+    out[p] = of();
     for (let i = p + 1; i < a.length; i++){
       const d = a[i] - a[i - 1];
       g = (g * (p - 1) + (d > 0 ? d : 0)) / p;
       l = (l * (p - 1) + (d < 0 ? -d : 0)) / p;
-      out[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+      out[i] = of();
     }
     return out;
   }
@@ -169,6 +171,38 @@ window.QT = window.QT || {};
     while (i > 0 && bars[i - 1].t > from) i--;
     return i;
   }
+  /* ---------- 달력 주 · 월 ----------
+     일봉 시각은 UTC 날짜가 곧 거래일이다 (market-data.js '거래일' 규칙). 주는 월요일에 시작 */
+  const DAY = 86400000;
+  function periodKey(t, tf){
+    const d = new Date(t);
+    if (tf === '1W') return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / DAY) - (d.getUTCDay() + 6) % 7;
+    return d.getUTCFullYear() * 12 + d.getUTCMonth();
+  }
+  /* 마지막 봉이 끝났으면 그다음 평일, 진행 중이면 그 봉의 날 — 지금 대응해야 하는 거래일 (휴장일은 모름) */
+  function sessionTime(bars, open){
+    let t = bars[bars.length - 1].t;
+    if (open) return t;
+    do { t += DAY; } while (new Date(t).getUTCDay() % 6 === 0);
+    return t;
+  }
+  /**
+   * 직전에 끝난 달력 주(tf '1W') · 월('1M')의 고가 · 저가 · 종가 — 표준 주간 · 월간 피봇의 기준.
+   * 최근 5봉 · 21봉을 굴려서 쓰면 주 중간에 기준이 매일 바뀌어 증권사 HTS 의 주간 · 월간 피봇과 달라진다.
+   * @param open 마지막 일봉이 아직 진행 중인지
+   */
+  function prevPeriod(bars, tf, open){
+    const n = bars.length;
+    if (!n) return null;
+    const cur = periodKey(sessionTime(bars, open), tf);
+    let e = n - 1;
+    while (e >= 0 && periodKey(bars[e].t, tf) >= cur) e--;
+    if (e < 0) return null;
+    const k = periodKey(bars[e].t, tf);
+    let h = -Infinity, l = Infinity, s = e;
+    for (; s >= 0 && periodKey(bars[s].t, tf) === k; s--){ if (bars[s].h > h) h = bars[s].h; if (bars[s].l < l) l = bars[s].l; }
+    return { h:h, l:l, c:bars[e].c, t:bars[e].t, n:e - s };
+  }
   function set(bars){
     const c = bars.map(function (b) { return b.c; });
     const bb = bollinger(c, 20, 2), md = macd(c, 12, 26, 9), dm = adx(bars, 14);
@@ -186,5 +220,5 @@ window.QT = window.QT || {};
 
   QT.Indicators = { sma:sma, ema:ema, bollinger:bollinger, rsi:rsi, macd:macd,
     stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, adx:adx, obv:obv, mfi:mfi, lastCross:lastCross,
-    yearStart:yearStart, set:set };
+    yearStart:yearStart, periodKey:periodKey, sessionTime:sessionTime, prevPeriod:prevPeriod, set:set };
 })(window.QT);
