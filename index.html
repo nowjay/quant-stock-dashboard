@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20261001d">
+<link rel="stylesheet" href="assets/css/app.css?v=20261001e">
 </head>
 <body data-view="home">
 <script>/* 마지막으로 본 화면을 먼저 적용해 깜빡임을 막는다 (app.js 의 VIEW_KEY) */
@@ -39,7 +39,13 @@
     <div class="tk-list" id="tk-list"><div class="tk-empty">시장 데이터를 불러오는 중…</div></div>
     <button class="tk-nav next" id="tk-next" aria-label="다음 지수" hidden><i data-lucide="chevron-right"></i></button>
   </div>
-  <div class="tk-meta" id="tk-meta" data-mode="loading"><span class="led"></span>불러오는 중…</div>
+  <div class="tk-side">
+    <div class="tk-range" id="tk-range" role="group" aria-label="지수 그래프 기간 (전체 지수에 적용)">
+      <span class="tk-rl">그래프 기간</span>
+      <button type="button" data-r="1M">1개월</button><button type="button" data-r="3M">3개월</button><button type="button" data-r="6M">6개월</button><button type="button" data-r="1Y">1년</button>
+    </div>
+    <div class="tk-meta" id="tk-meta" data-mode="loading"><span class="led"></span>불러오는 중…</div>
+  </div>
 </section>
 
 <div class="scrim" id="scrim"></div>
@@ -453,28 +459,28 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20261001d"></script>
-<script src="assets/core/search.js?v=20261001d"></script>
-<script src="assets/core/events.js?v=20261001d"></script>
-<script src="assets/core/markets.js?v=20261001d"></script>
-<script src="assets/core/market-data.js?v=20261001d"></script>
-<script src="assets/core/indicators.js?v=20261001d"></script>
-<script src="assets/core/scoring.js?v=20261001d"></script>
-<script src="assets/core/patterns.js?v=20261001d"></script>
-<script src="assets/core/targets.js?v=20261001d"></script>
-<script src="assets/core/analysis.js?v=20261001d"></script>
-<script src="assets/core/backtest.js?v=20261001d"></script>
-<script src="assets/core/fundamentals.js?v=20261001d"></script>
-<script src="assets/core/signal.js?v=20261001d"></script>
-<script src="assets/core/news.js?v=20261001d"></script>
-<script src="assets/feed/mock.js?v=20261001d"></script>
-<script src="assets/feed/kis.js?v=20261001d"></script>
-<script src="assets/feed/toss.js?v=20261001d"></script>
-<script src="assets/feed/index.js?v=20261001d"></script>
-<script src="assets/home.js?v=20261001d"></script>
-<script src="assets/value.js?v=20261001d"></script>
-<script src="assets/screener.js?v=20261001d"></script>
-<script src="assets/learn.js?v=20261001d"></script>
-<script src="assets/app.js?v=20261001d"></script>
+<script src="assets/core/fx.js?v=20261001e"></script>
+<script src="assets/core/search.js?v=20261001e"></script>
+<script src="assets/core/events.js?v=20261001e"></script>
+<script src="assets/core/markets.js?v=20261001e"></script>
+<script src="assets/core/market-data.js?v=20261001e"></script>
+<script src="assets/core/indicators.js?v=20261001e"></script>
+<script src="assets/core/scoring.js?v=20261001e"></script>
+<script src="assets/core/patterns.js?v=20261001e"></script>
+<script src="assets/core/targets.js?v=20261001e"></script>
+<script src="assets/core/analysis.js?v=20261001e"></script>
+<script src="assets/core/backtest.js?v=20261001e"></script>
+<script src="assets/core/fundamentals.js?v=20261001e"></script>
+<script src="assets/core/signal.js?v=20261001e"></script>
+<script src="assets/core/news.js?v=20261001e"></script>
+<script src="assets/feed/mock.js?v=20261001e"></script>
+<script src="assets/feed/kis.js?v=20261001e"></script>
+<script src="assets/feed/toss.js?v=20261001e"></script>
+<script src="assets/feed/index.js?v=20261001e"></script>
+<script src="assets/home.js?v=20261001e"></script>
+<script src="assets/value.js?v=20261001e"></script>
+<script src="assets/screener.js?v=20261001e"></script>
+<script src="assets/learn.js?v=20261001e"></script>
+<script src="assets/app.js?v=20261001e"></script>
 </body>
 </html>

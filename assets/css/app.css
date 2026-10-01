@@ -876,7 +876,17 @@ body[data-view="stock"] .home{display:none}
 .tk-p{grid-column:1;font-size:15.5px;font-weight:800;letter-spacing:-.035em;white-space:nowrap;margin-top:1px}
 .tk-c{grid-column:1;display:flex;gap:5px;font-size:11px;font-weight:700;white-space:nowrap}
 .tk-c em{font-style:normal;opacity:.9}
-.tk-card .spk{grid-column:2;grid-row:2/4;width:64px;height:26px}
+.tk-card .spk{grid-column:2;grid-row:2;width:64px;height:22px}
+/* 선택한 기간의 변동률 (그래프 아래) */
+.tk-r{grid-column:2;grid-row:3;text-align:right;font-size:10.5px;font-weight:700;white-space:nowrap;min-height:15px}
+/* 전광판 오른쪽: 그래프 기간(전체 지수에 적용) + 수집 상태 */
+.tk-side{flex:none;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:6px 12px;border-left:1px solid var(--hair)}
+.tk-range{display:flex;align-items:center;gap:2px;background:var(--hair);border-radius:9px;padding:2px}
+.tk-range .tk-rl{display:none;font-size:11px;font-weight:700;color:var(--muted);padding:0 6px 0 4px;white-space:nowrap}
+.tk-range button{flex:1;height:24px;padding:0 8px;border-radius:7px;font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap;transition:.13s}
+.tk-range button:hover{color:var(--ink-2)}
+.tk-range button.on{background:#fff;color:var(--blue-ink);box-shadow:var(--shadow)}
+.tk-side .tk-meta{border-left:0;padding:0 2px;justify-content:flex-end}
 .spk{display:block}
 .tk-nav{
   position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:28px;height:28px;border-radius:50%;
@@ -1124,6 +1134,14 @@ body.fs-lock{overflow:hidden}
 @media (max-width:760px){
   .h-duo{grid-template-columns:minmax(0,1fr)}
   .tk-meta{padding:0 12px;font-size:0}                 /* 좁은 화면: 상태 점만 (시각은 title) */
+  /* 그래프 기간은 전광판 위 한 줄로 */
+  .tk{flex-direction:column}
+  .tk-side{order:-1;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px 0;border-left:0}
+  .tk-range{background:none;padding:0;gap:4px}
+  .tk-range .tk-rl{display:inline;padding:0 4px 0 2px}
+  .tk-range button{flex:none;height:30px;padding:0 11px;border-radius:999px;background:var(--hair);font-size:12px}
+  .tk-range button.on{background:var(--ink);color:#fff;box-shadow:none}
+  .tk-side .tk-meta{padding:0 4px}
 }
 @media (max-width:560px){
   .logo-t{display:none}
