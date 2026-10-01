@@ -108,15 +108,39 @@ window.QT = window.QT || {};
     if (s.mode === 'error') return '<span class="led"></span>시세 연결 실패';
     return '<span class="led"></span>불러오는 중…';
   }
+  /* 스파크라인 기간 — 모든 지수 카드에 한꺼번에 적용하고, 고른 기간은 이 브라우저에 저장한다.
+     카드 숫자(전일 대비)는 그대로 두고, 그래프 아래에 그 기간의 변동률을 따로 적는다 */
+  const TK_KEY = 'qt.tk.range.v1', TK_MONTHS = { '1M':1, '3M':3, '6M':6, '1Y':12 };
+  const TK_LABEL = { '1M':'1개월', '3M':'3개월', '6M':'6개월', '1Y':'1년' };
+  let tkRange = (function () { try { const r = localStorage.getItem(TK_KEY); return TK_MONTHS[r] ? r : '1M'; } catch (e) { return '1M'; } })();
+  /* 마지막 시세 날짜에서 달력으로 n개월 전부터 (일봉은 약 1년치 — 그보다 짧으면 있는 만큼) */
+  function tkSeries(it){
+    const h = it.h || [];
+    if (!h.length) return [];
+    const last = h[h.length - 1][0], d = new Date(Math.floor(last / 10000), Math.floor(last / 100) % 100 - 1, last % 100);
+    d.setMonth(d.getMonth() - TK_MONTHS[tkRange]);
+    const from = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    return h.filter(function (x) { return x[0] >= from; }).map(function (x) { return x[1]; });
+  }
+  function setTkRange(r){
+    if (!TK_MONTHS[r] || r === tkRange) return;
+    tkRange = r;
+    try { localStorage.setItem(TK_KEY, r); } catch (e) {}
+    renderTicker();
+  }
   function tkCard(it, group){
-    const c = chgParts(it), vals = it.h.slice(-23).map(function (x) { return x[1]; });
+    const c = chgParts(it), vals = tkSeries(it);
+    /* 기간 변동률 — 선 색도 '오늘 등락'이 아니라 이 기간의 방향을 따른다 (1년 내내 오른 지수가 오늘 내렸다고 파랗게 보이지 않게) */
+    const chg = vals.length > 1 && vals[0] ? (vals[vals.length - 1] / vals[0] - 1) * 100 : null;
     const when = it.t ? hm(it.t) : it.day ? mdOf(it.day) + ' 종가' : '';
     const stale = staleOpen(it, group);
     return '<button type="button" class="tk-card" data-k="' + it.k + '" title="' + esc(it.n) + (when ? ' · ' + when : '') + ' — 추세 보기">' +
       '<span class="tk-n">' + it.n + (stale ? '<em>' + mdOf(it.day) + ' 종가</em>' : '') + '</span>' +
       '<b class="tk-p num">' + valText(it, it.p) + '</b>' +
       '<span class="tk-c num ' + cls(it.d) + '"><span>' + c.a + '</span>' + (c.b ? '<em>' + c.b + '</em>' : '') + '</span>' +
-      spark(vals, it.d, 64, 26) +
+      spark(vals, chg == null ? it.d : chg, 64, 22) +
+      '<span class="tk-r num ' + (chg == null ? 'flat' : cls(chg)) + '" title="' + TK_LABEL[tkRange] + ' 변동률">' +
+        (chg == null ? '' : (chg > 0 ? '+' : chg < 0 ? '−' : '') + Math.abs(chg).toFixed(1) + '%') + '</span>' +
     '</button>';
   }
   function renderTicker(){
@@ -131,6 +155,10 @@ window.QT = window.QT || {};
         items.map(function (it) { return tkCard(it, g[0]); }).join('');
     });
     el.innerHTML = html || '<div class="tk-empty">' + (MK.status.mode === 'error' ? '시장 데이터를 불러오지 못했습니다.' : '시장 데이터를 불러오는 중…') + '</div>';
+    $$('#tk-range button').forEach(function (b) {
+      const on = b.dataset.r === tkRange;
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     const meta = $('#tk-meta');
     meta.innerHTML = statusText();
     meta.dataset.mode = MK.status.mode;
@@ -532,7 +560,9 @@ window.QT = window.QT || {};
     if (!src || !LWC) return;
     pop.key = key; pop.long = null; pop.opener = opener || null;
     const ranges = popRanges(src);
-    pop.range = src.step ? '5Y' : src.score ? '6M' : '3M';
+    /* 전광판 카드에서 열면 전광판에서 고른 기간으로 시작한다 */
+    const fromTk = opener && opener.classList && opener.classList.contains('tk-card') && ranges.indexOf(tkRange) >= 0;
+    pop.range = src.step ? '5Y' : src.score ? '6M' : fromTk ? tkRange : '3M';
     $('#pop-range').innerHTML = ranges.map(function (r) { return '<button type="button" data-r="' + r + '">' + RLABEL[r] + '</button>'; }).join('');
     $('#pop-err').hidden = true;
     const box = $('#pop');
@@ -603,6 +633,7 @@ window.QT = window.QT || {};
     window.addEventListener('resize', tkArrows);
     $('#tk-prev').addEventListener('click', function () { tk.scrollBy({ left:-tk.clientWidth * 0.8, behavior:'smooth' }); });
     $('#tk-next').addEventListener('click', function () { tk.scrollBy({ left:tk.clientWidth * 0.8, behavior:'smooth' }); });
+    $('#tk-range').addEventListener('click', function (e) { const b = e.target.closest('button[data-r]'); if (b) setTkRange(b.dataset.r); });
     document.addEventListener('click', function (e) {
       const t = e.target.closest('.tk-card, .mi-tile, .fg-gauge');
       if (!t) return;
