@@ -3,7 +3,10 @@
 글로벌 매크로 일정 · 실적 발표일 · 국내 컨센서스 수집기
   · FOMC 일정      : federalreserve.gov (공식 일정, SEP·점도표 회의 표시)
   · 미국 경제지표   : bls.gov 발표 캘린더(iCalendar) — CPI · PPI · 고용보고서 공식 발표 시각
+                     bls.gov 는 자동 요청을 403 으로 막는 일이 잦아, 받지 못하면 아래 OFFICIAL_MACRO(직접 확인한 공식 일정)로 채웁니다.
+                     PCE · GDP(bea.gov) · 금통위(한국은행)는 수집 경로가 없어 OFFICIAL_MACRO 에만 있습니다.
   · 실적 발표일     : api.nasdaq.com — 빅테크·대형주 다음 실적 발표일 (회사 공지 전이면 '예상')
+                     nasdaq 에 날짜가 없거나 '예상'뿐인 종목은 MANUAL_EARNINGS(회사 공지로 확인한 날짜)로 보완합니다.
   · 국내 컨센서스   : 네이버 integration API (목표주가 · 투자의견)
 앱(assets/core/events.js)은 여기 없는 일정(금통위 · 한국 물가 · 수출입 · 만기 등)을
 발표 패턴 규칙으로 만들고 '예상/규칙'으로 표기합니다. 이 파일의 일정은 같은 달 규칙 일정을 대체합니다.
@@ -11,7 +14,7 @@
 결과: assets/data/events.json
 """
 import io, json, os, re, subprocess, sys, time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 try:
     from zoneinfo import ZoneInfo
     ET_TZ = ZoneInfo('America/New_York')
@@ -23,7 +26,32 @@ OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'data')
 
 # assets/core/events.js 의 EARN 목록 중 미국 상장 종목
 US_EARNINGS = ['JPM', 'ASML', 'TSM', 'NFLX', 'TSLA', 'INTC', 'GOOGL', 'MSFT', 'META', 'AAPL', 'AMZN',
-               'PLTR', 'AMD', 'NVDA', 'AVGO', 'ORCL', 'MU']
+               'PLTR', 'AMD', 'NVDA', 'AVGO', 'ORCL', 'MU', 'SNDK', 'LLY']
+
+# ---------------------------------------------------------------------------------------------
+# 직접 확인한 공식 일정 — 수집이 막히거나(bls.gov 403) 수집 경로가 없는(bea.gov · 한국은행) 일정.
+# 앱의 날짜 규칙은 '발표 패턴 추정'이라 공휴일 · 기관 사정으로 어긋난다
+#   (2026년 11~12월: CPI 11/11 → 실제 11/10, 12/16 → 12/10 · PPI 11/12 → 11/13, 12/17 → 12/15 · PCE 10/30 → 10/29, 11/27 → 11/25, 12/24 → 12/23).
+# 기관이 다음 해 일정을 발표하면(BLS · BEA 는 가을, 한국은행은 10월 말) 여기에 추가합니다.
+# (종류, 날짜, 시, 분, 시간대, 출처)  — 확인일 2026-10-01
+# ---------------------------------------------------------------------------------------------
+OFFICIAL_MACRO = [
+    ('nfp', '2026-10-02', 8, 30, 'ET', 'bls.gov'), ('nfp', '2026-11-06', 8, 30, 'ET', 'bls.gov'), ('nfp', '2026-12-04', 8, 30, 'ET', 'bls.gov'),
+    ('cpi', '2026-10-14', 8, 30, 'ET', 'bls.gov'), ('cpi', '2026-11-10', 8, 30, 'ET', 'bls.gov'), ('cpi', '2026-12-10', 8, 30, 'ET', 'bls.gov'),
+    ('ppi', '2026-10-15', 8, 30, 'ET', 'bls.gov'), ('ppi', '2026-11-13', 8, 30, 'ET', 'bls.gov'), ('ppi', '2026-12-15', 8, 30, 'ET', 'bls.gov'),
+    ('pce', '2026-10-29', 8, 30, 'ET', 'bea.gov'), ('pce', '2026-11-25', 8, 30, 'ET', 'bea.gov'), ('pce', '2026-12-23', 8, 30, 'ET', 'bea.gov'),
+    ('gdp', '2026-10-29', 8, 30, 'ET', 'bea.gov'),
+    ('bok', '2026-10-22', 10, 0, 'KST', '한국은행'), ('bok', '2026-11-26', 10, 0, 'KST', '한국은행'),
+]
+
+# 회사가 공지한 실적 발표일 — nasdaq 에 날짜가 없거나 '예상'으로만 나오는 종목.
+# nasdaq 이 같은 분기를 '확정'으로 주기 시작하면 그 값을 씁니다. 지난 일정은 10일 뒤 자동으로 빠집니다.
+# (종목, 현지 날짜, bmo/amc, 출처)  — 확인일 2026-10-01
+MANUAL_EARNINGS = [
+    ('MU',   '2026-09-30', 'amc', 'sec.gov 8-K'),                       # 2026 회계연도 4분기 (발표 보도자료)
+    ('SNDK', '2026-10-29', 'amc', '회사 공지 (tipranks.com 보도)'),       # 2027 회계연도 1분기 · 컨퍼런스콜 16:30 ET
+    ('NVDA', '2026-11-17', 'amc', 'wallstreethorizon.com (회사 확정)'),   # 2027 회계연도 3분기
+]
 
 
 def get(url, tries=3, timeout=15):
@@ -150,6 +178,38 @@ def bls_pages():
     return out
 
 
+def official_macro(have):
+    """OFFICIAL_MACRO 중 수집으로 채워지지 않은 (종류, 달)만. have: 이미 수집한 일정 [{kind, t}]"""
+    def month(t, tz):
+        return datetime.fromtimestamp(t / 1000, tz).strftime('%Y-%m')
+    kst = timezone(timedelta(hours=9))
+    seen = {(r['kind'], month(r['t'], kst)) for r in have if 't' in r}
+    now, out = time.time() * 1000, []
+    for kind, day, hh, mm, tz, src in OFFICIAL_MACRO:
+        y, mo, d = (int(x) for x in day.split('-'))
+        t = et_ms(y, mo, d, hh, mm) if tz == 'ET' else int(datetime(y, mo, d, hh, mm, tzinfo=kst).timestamp() * 1000)
+        if t is None or t < now - 40 * 86400000 or (kind, month(t, kst)) in seen:
+            continue
+        out.append({'kind': kind, 't': t, 'status': '확정', 'source': src})
+    return out
+
+
+def manual_earnings(found):
+    """nasdaq 결과(found)에 MANUAL_EARNINGS 를 합친다. nasdaq '확정'이 있으면 그 값, 없으면 직접 확인한 날짜."""
+    today = datetime.now(timezone.utc).date()
+    out = list(found)
+    for code, day, when, src in MANUAL_EARNINGS:
+        d = datetime.strptime(day, '%Y-%m-%d').date()
+        if (today - d).days > 10:
+            continue
+        near = [e for e in out if e['code'] == code and abs((datetime.strptime(e['date'], '%Y-%m-%d').date() - d).days) < 25]
+        if any(e['status'] == '확정' for e in near):
+            continue
+        out = [e for e in out if e not in near]
+        out.append({'code': code, 'date': day, 'when': when, 'status': '확정', 'source': src})
+    return out
+
+
 def bls():
     """CPI · PPI · 고용보고서 공식 발표 시각. iCalendar → 지표별 일정 페이지 순서로 시도"""
     if ET_TZ is None:
@@ -225,6 +285,9 @@ def main():
     b = bls()
     print('  %d건%s' % (len(b), '' if ET_TZ else ' (zoneinfo 없음 — Python 3.9+ 필요)'))
     macro += b
+    o = official_macro(b)
+    print('  + 직접 확인한 공식 일정 %d건 (BLS 미수집분 · BEA · 한국은행)' % len(o))
+    macro += o
 
     print('[3/4] 실적 발표일')
     earnings = []
@@ -234,6 +297,9 @@ def main():
             earnings.append(r)
         print('  %-6s %s' % (s, (r['date'] + ' ' + r['status']) if r else 'x'))
         time.sleep(0.4)
+    n = len(earnings)
+    earnings = manual_earnings(earnings)
+    print('  + 회사 공지로 확인한 일정 반영 (%d → %d건)' % (n, len(earnings)))
 
     print('[4/4] 국내 컨센서스')
     symbols = {}

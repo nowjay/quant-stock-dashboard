@@ -52,6 +52,13 @@ window.QT = window.QT || {};
   const KRX_TOP = { stock:150, etf:40 };
 
   function register(row){
+    /* 종목 마스터에 국내 ETF 가 주식(KOSPI) · ETF 로 두 번 들어 있다 — 한 종목으로 합치고 ETF 로 분류한다
+       (검색 결과에 같은 종목이 두 줄 나오던 문제) */
+    const had = BY_CODE[row.c];
+    if (had){
+      if (row.t === 'etf' && had.type !== 'etf'){ had.type = 'etf'; had.market = row.m || had.market; had.vol = 0.0105; }
+      return had;
+    }
     const st = {
       code: row.c, name: row.n, en: row.e || '', market: row.m,
       sector: row.s || '', type: row.t || 'stock', cur: row.cur || 'KRW'

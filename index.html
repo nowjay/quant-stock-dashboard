@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
 <title>QUANT 주식 대시보드</title>
 <meta name="description" content="글로벌 지수 전광판 · 환율 · 원자재 · 금리 · 공포/탐욕 지수 · 매크로 D-Day · 실시간 캔들 차트 · AI 목표주가 · 재무 가치분석 · 추천 종목 스크리너 대시보드">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20261001a">
+<link rel="stylesheet" href="assets/css/app.css?v=20261001c">
 </head>
 <body data-view="home">
 <script>/* 마지막으로 본 화면을 먼저 적용해 깜빡임을 막는다 (app.js 의 VIEW_KEY) */
@@ -22,6 +23,7 @@
     <button data-view="stock"><i data-lucide="candlestick-chart"></i><span class="vn-l">종목 분석</span><span class="vn-s">분석</span></button>
   </nav>
   <div class="grow"></div>
+  <button class="icon-btn search-btn" id="search-btn" aria-label="종목 검색"><i data-lucide="search"></i></button>
   <div class="feed-pill" id="feed-pill" data-mode="connecting"><span class="led"></span><span id="feed-text">연결 중</span></div>
   <button class="icon-btn" id="settings-btn" aria-label="API 연결 설정"><i data-lucide="settings"></i></button>
 </header>
@@ -136,7 +138,10 @@
     <section class="card">
       <div class="quote">
         <div class="idn">
-          <h1 id="q-name">—</h1>
+          <div class="idn-top">
+            <h1 id="q-name">—</h1>
+            <button type="button" class="wl-btn" id="q-star" aria-pressed="false"><i data-lucide="star"></i><span>관심종목 추가</span></button>
+          </div>
           <div class="meta">
             <span class="code" id="q-code"></span>
             <span class="chip" id="q-market"></span>
@@ -302,6 +307,7 @@
           <button data-cat="inflation">물가</button>
           <button data-cat="jobs">고용·경기</button>
           <button data-cat="expiry">만기</button>
+          <button data-cat="earn">실적</button>
         </div>
         <div class="timeline" id="mc-list"></div>
         <button class="more" id="mc-more" hidden>일정 더 보기</button>
@@ -348,8 +354,9 @@
 </div>
 
 <!-- ==================== API 연결 모달 ==================== -->
-<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+<div class="modal sheet" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="box">
+    <div class="m-body">
     <h3 id="modal-title">실시간 시세 연결</h3>
     <p class="lead">차트와 분석은 <b>공공데이터포털 금융위원회_주식시세정보</b>(전 영업일 종가, 매일 오후 1시 이후 갱신)로 이루어집니다.
       토스증권 Open API 를 연결하면 그 위에 <b>실시간 주가</b>와 오늘 봉 · 1분봉이 더해집니다. 연결에 실패하면 공공데이터 종가로 돌아갑니다.</p>
@@ -405,12 +412,15 @@
       <input id="f-news-proxy" type="text" placeholder="https://my-server.com/rss?url={url}" autocomplete="off">
       <div class="hint">{url} 자리에 언론사 RSS 주소가 들어갑니다. RSS(XML) 또는 rss2json 형식 JSON 을 CORS 허용으로 돌려주면 됩니다.</div>
     </div>
+    </div>
     <div class="row">
       <button class="ghost" id="m-cancel">취소</button>
       <button class="primary" id="m-save">연결하기</button>
     </div>
   </div>
 </div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.544.0/dist/umd/lucide.min.js"></script>
@@ -420,27 +430,27 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20261001a"></script>
-<script src="assets/core/search.js?v=20261001a"></script>
-<script src="assets/core/events.js?v=20261001a"></script>
-<script src="assets/core/markets.js?v=20261001a"></script>
-<script src="assets/core/market-data.js?v=20261001a"></script>
-<script src="assets/core/indicators.js?v=20261001a"></script>
-<script src="assets/core/scoring.js?v=20261001a"></script>
-<script src="assets/core/patterns.js?v=20261001a"></script>
-<script src="assets/core/targets.js?v=20261001a"></script>
-<script src="assets/core/analysis.js?v=20261001a"></script>
-<script src="assets/core/backtest.js?v=20261001a"></script>
-<script src="assets/core/fundamentals.js?v=20261001a"></script>
-<script src="assets/core/signal.js?v=20261001a"></script>
-<script src="assets/core/news.js?v=20261001a"></script>
-<script src="assets/feed/mock.js?v=20261001a"></script>
-<script src="assets/feed/kis.js?v=20261001a"></script>
-<script src="assets/feed/toss.js?v=20261001a"></script>
-<script src="assets/feed/index.js?v=20261001a"></script>
-<script src="assets/home.js?v=20261001a"></script>
-<script src="assets/value.js?v=20261001a"></script>
-<script src="assets/screener.js?v=20261001a"></script>
-<script src="assets/app.js?v=20261001a"></script>
+<script src="assets/core/fx.js?v=20261001c"></script>
+<script src="assets/core/search.js?v=20261001c"></script>
+<script src="assets/core/events.js?v=20261001c"></script>
+<script src="assets/core/markets.js?v=20261001c"></script>
+<script src="assets/core/market-data.js?v=20261001c"></script>
+<script src="assets/core/indicators.js?v=20261001c"></script>
+<script src="assets/core/scoring.js?v=20261001c"></script>
+<script src="assets/core/patterns.js?v=20261001c"></script>
+<script src="assets/core/targets.js?v=20261001c"></script>
+<script src="assets/core/analysis.js?v=20261001c"></script>
+<script src="assets/core/backtest.js?v=20261001c"></script>
+<script src="assets/core/fundamentals.js?v=20261001c"></script>
+<script src="assets/core/signal.js?v=20261001c"></script>
+<script src="assets/core/news.js?v=20261001c"></script>
+<script src="assets/feed/mock.js?v=20261001c"></script>
+<script src="assets/feed/kis.js?v=20261001c"></script>
+<script src="assets/feed/toss.js?v=20261001c"></script>
+<script src="assets/feed/index.js?v=20261001c"></script>
+<script src="assets/home.js?v=20261001c"></script>
+<script src="assets/value.js?v=20261001c"></script>
+<script src="assets/screener.js?v=20261001c"></script>
+<script src="assets/app.js?v=20261001c"></script>
 </body>
 </html>
