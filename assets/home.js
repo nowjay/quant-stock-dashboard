@@ -392,7 +392,7 @@ window.QT = window.QT || {};
         '<span class="dd-t"><span class="ic"><i data-lucide="' + (DD_ICON[e.cat] || 'calendar') + '"></i></span><b>' + esc(title) + '</b>' +
           (e.imp >= 3 ? '<span class="dd-key">핵심</span>' : '') +
           '<span class="status-chip" data-s="' + e.status + '">' + e.status + '</span></span>' +
-        '<small class="dd-m"><span class="cty" data-c="' + cty + '">' + (cty === 'KR' ? '한국' : '미국') + '</span>' +
+        '<small class="dd-m"><span class="cty" data-c="' + cty + '">' + ({ KR:'한국', TW:'대만', EU:'유럽' }[cty] || '미국') + '</span>' +
           meta + (e.isEarn && e.tag ? ' · ' + esc(e.tag) : '') + '</small>' +
         cmpHtml(e) +
       '</span></' + tagName + '>';

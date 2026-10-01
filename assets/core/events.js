@@ -216,7 +216,12 @@ window.QT = window.QT || {};
   /* =============================================================
      실적 시즌 캘린더 — 시장 주도 대형주
        rules: [발표월, 요일(0=일), 기준일] — 기준일 이후 첫 해당 요일
+       nthOpen: 국내 잠정실적 — 분기 다음 달의 n번째 영업일 (요일이 일정하지 않고 연휴에 따라 밀린다)
        when : bmo(미국 장 전) · amc(미국 장 마감 후) · tw(대만 오후) · eu(유럽 장 전) · kr(국내, 시각)
+       sub  : 같은 회사의 두 번째 일정(확정실적)을 구분하는 제목
+     규칙은 최근 2~3년 발표일에 맞춘 추정('예상')이고, events.json 에 회사가 공지한 날짜('확정')가 있으면 그 날짜를 쓴다.
+     nasdaq.com 의 '예상' 날짜는 쓰지 않는다 — 과거 발표일로 만든 알고리즘 추정이라 아래 규칙보다 정확하지 않았다
+     (2026년 3분기: 테슬라 10/28 · MS/알파벳/메타 11/4 로 추정했지만 세 회사는 매년 10월 넷째 주에 발표해 왔다).
      ============================================================= */
   const EARN = [
     { code:'JPM',    name:'JP모건',          when:'bmo', tag:'대형은행 · 실적 시즌 개막', rules:[[0,2,11],[3,2,11],[6,2,11],[9,2,11]] },
@@ -236,8 +241,11 @@ window.QT = window.QT || {};
     { code:'AVGO',   name:'브로드컴',        when:'amc', tag:'AI ASIC · 네트워크',        rules:[[2,4,6],[5,4,6],[8,4,4],[11,4,8]], fiscal:true },
     { code:'ORCL',   name:'오라클',          when:'amc', tag:'AI 클라우드 수주잔고',      rules:[[2,2,9],[5,3,10],[8,2,8],[11,3,8]], fiscal:true },
     { code:'MU',     name:'마이크론',        when:'amc', tag:'HBM · 메모리 업황',         rules:[[2,3,18],[5,3,23],[8,3,20],[11,3,15]], fiscal:true },
-    { code:'005930', name:'삼성전자',        when:'kr', at:8,  tag:'메모리 업황 선행지표', rules:[[0,2,5],[3,2,5],[6,2,5],[9,2,5]], prelim:true },
-    { code:'373220', name:'LG에너지솔루션',  when:'kr', at:8,  tag:'2차전지 업황',     rules:[[0,1,6],[3,1,6],[6,1,6],[9,1,6]], prelim:true },
+    { code:'SNDK',   name:'샌디스크',        when:'amc', tag:'낸드 가격 · 데이터센터 SSD', rules:[[0,4,26],[3,4,27],[7,3,4],[9,4,27]], fiscal:true },
+    { code:'LLY',    name:'일라이릴리',      when:'bmo', tag:'비만 · 당뇨 치료제',        rules:[[1,4,1],[3,4,27],[7,4,3],[9,4,27]] },
+    { code:'005930', name:'삼성전자',        when:'kr', at:8,  tag:'메모리 업황 선행지표', rules:[[0],[3],[6],[9]], nthOpen:5, prelim:true },
+    { code:'005930', name:'삼성전자',        when:'kr', at:8,  tag:'사업부별 실적 · 컨퍼런스콜', rules:[[0,4,25],[3,4,25],[6,4,25],[9,4,25]], sub:'확정실적 · 컨퍼런스콜' },
+    { code:'373220', name:'LG에너지솔루션',  when:'kr', at:8,  tag:'2차전지 업황',     rules:[[0],[3],[6],[9]], nthOpen:5, prelim:true },
     { code:'000660', name:'SK하이닉스',      when:'kr', at:8,  tag:'HBM 실적 · 반도체 투톱',      rules:[[0,4,22],[3,4,22],[6,4,22],[9,4,22]] },
     { code:'005380', name:'현대차',          when:'kr', at:14, tag:'환율 · 관세 영향',            rules:[[0,4,22],[3,4,22],[6,4,24],[9,4,24]] }
   ];
@@ -260,11 +268,13 @@ window.QT = window.QT || {};
     const to = opts.to != null ? opts.to : now + (opts.days || 75) * DAY;
     const fixed = {};
     (DB.earnings || []).forEach(function (e) { if (e.code && (isFinite(e.t) || e.date)) (fixed[e.code] = fixed[e.code] || []).push(e); });
-    /* 수집 일정은 t(발표 시각) 또는 date(YYYY-MM-DD)+when 으로 들어온다 */
+    /* 수집 일정은 t(발표 시각) 또는 date(YYYY-MM-DD)+when 으로 들어온다.
+       대만 · 유럽 기업은 미국 예탁증서 기준 '장 전'으로 수집되지만 실제 발표는 현지 시각이므로 규칙의 시각을 쓴다 */
+    function whenOf(f, e){ return e.when === 'tw' || e.when === 'eu' || e.when === 'kr' ? e.when : (f.when || e.when); }
     function fixedT(f, e){
       if (isFinite(f.t)) return f.t;
       const p = String(f.date).split('-');
-      return earnTime({ when:f.when || e.when, at:e.at }, ymd(+p[0], +p[1] - 1, +p[2]));
+      return earnTime({ when:whenOf(f, e), at:e.at }, ymd(+p[0], +p[1] - 1, +p[2]));
     }
     const base = kst(now), out = [];
     EARN.forEach(function (e) {
@@ -272,18 +282,23 @@ window.QT = window.QT || {};
         const y = base.y + Math.floor((base.m + i) / 12), m = ((base.m + i) % 12 + 12) % 12;
         e.rules.forEach(function (r) {
           if (r[0] !== m) return;
-          let t = earnTime(e, onOrAfter(y, m, r[2], r[1])), status = '예상';
-          const hit = (fixed[e.code] || []).filter(function (f) { return Math.abs(fixedT(f, e) - t) < 25 * DAY; })[0];
+          let t = earnTime(e, e.nthOpen ? krNthOpen(y, m, e.nthOpen) : onOrAfter(y, m, r[2], r[1])), status = '예상';
+          /* 회사가 공지한 날짜만 규칙을 대체한다 ('예상'으로 수집된 날짜는 쓰지 않음). 확정실적(sub)은 잠정실적 날짜와 섞이지 않게 제외 */
+          const hit = e.sub ? null : (fixed[e.code] || []).filter(function (f) {
+            return (f.status || '확정') !== '예상' && Math.abs(fixedT(f, e) - t) < 25 * DAY;
+          })[0];
           if (hit){ t = fixedT(hit, e); status = hit.status || '확정'; }
           if (t < from || t >= to) return;
           const q = quarterOf(m);
-          const when = hit && hit.when || e.when;
+          const when = hit ? whenOf(hit, e) : e.when;
           /* 미국 기업은 현지(동부) 발표일도 함께 — 장 마감 후 발표는 한국시간으로 다음 날 새벽 */
           const loc = (when === 'bmo' || when === 'amc') ? kst(t - 14 * HOUR) : null;
           out.push({
             code:e.code, name:e.name, tag:e.tag, when:when, t:t, status:status,
+            country: when === 'kr' ? 'KR' : when === 'tw' ? 'TW' : when === 'eu' ? 'EU' : 'US',
+            src: hit ? hit.source || '' : '',
             local: loc ? (loc.m + 1) + '/' + loc.d : null,
-            title: e.fiscal ? '분기 실적 발표' : (e.prelim ? q + '분기 잠정실적' : q + '분기 실적 발표'),
+            title: e.fiscal ? '분기 실적 발표' : q + '분기 ' + (e.sub || (e.prelim ? '잠정실적' : '실적 발표')),
             whenLabel: when === 'kr' ? ((e.at || 9) < 9 ? '장 시작 전' : '장 중') : (WHEN_LABEL[when] || '')
           });
         });

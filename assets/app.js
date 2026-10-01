@@ -1149,14 +1149,16 @@
   }
 
   /* ---------------- 글로벌 매크로 패널 ---------------- */
-  const CAT_ICON = { rate:'landmark', inflation:'shopping-basket', jobs:'briefcase', expiry:'alarm-clock' };
-  const COUNTRY = { US:'미국', KR:'한국' };
+  const CAT_ICON = { rate:'landmark', inflation:'shopping-basket', jobs:'briefcase', expiry:'alarm-clock', earn:'building-2' };
+  const COUNTRY = { US:'미국', KR:'한국', TW:'대만', EU:'유럽' };
   function impDots(n){
     return '<span class="imp" title="중요도 ' + n + '/3">' + [1, 2, 3].map(function (i) { return '<i' + (i <= n ? ' class="on"' : '') + '></i>'; }).join('') + '</span>';
   }
   function macroRow(e){
     const now = Date.now(), past = e.t < now, soon = !past && e.t - now < 3 * 86400000;
-    return '<div class="tl' + (past ? ' past' : soon ? ' soon' : '') + '" data-kind="' + e.cat + '">' +
+    const link = e.isEarn && M.BY_CODE[e.code];              // 실적 일정은 누르면 그 종목 차트로
+    return '<div class="tl' + (past ? ' past' : soon ? ' soon' : '') + '" data-kind="' + e.cat + '"' +
+        (link ? ' data-code="' + e.code + '" role="button" tabindex="0" title="' + e.title + ' — 차트 보기"' : '') + '>' +
       '<div class="when"><div class="dd">' + (past ? '발표됨' : EV.dday(e.t)) + '</div><div class="md">' + EV.fmtMD(e.t).split(' ')[0] + '</div>' + impDots(e.imp) + '</div>' +
       '<div class="body"><b><span class="ic"><i data-lucide="' + (CAT_ICON[e.cat] || 'calendar') + '"></i></span>' +
         '<span class="tt">' + e.title + '</span><span class="status-chip" data-s="' + e.status + '">' + e.status + '</span></b>' +
@@ -1194,8 +1196,19 @@
     if (heroAt <= Date.now()){ renderMacro(); return; }
     const el = $('#mc-cd'); if (el) el.innerHTML = cdHtml(heroAt);
   }
+  /* 대형주 실적 발표도 매크로 일정에 함께 넣는다 (홈의 '다가오는 주요 매크로 일정'과 같은 구성) */
+  function earnAsMacro(e){
+    return {
+      cat:'earn', kind:'earn', isEarn:true, code:e.code, country:e.country, imp:2, status:e.status, t:e.t,
+      title:e.name + ' ' + e.title,
+      detail:(e.local ? '현지 ' + e.local + ' ' : '') + e.whenLabel + ' · ' + e.tag + (e.status === '예상' ? ' · 과거 발표일 기준 추정' : '')
+    };
+  }
   function renderMacroList(){
-    const list = EV.macro({ cat: state.mcCat || null });
+    const cat = state.mcCat, today = EV.dayNo(Date.now()) * 86400000 - 9 * 3600000;      // 오늘 0시(KST) — 매크로 일정과 같은 기간
+    const macro = cat === 'earn' ? [] : EV.macro({ cat: cat || null });
+    const earn = cat && cat !== 'earn' ? [] : EV.earnings({ from:today, days:120 }).map(earnAsMacro);
+    const list = macro.concat(earn).sort(function (a, b) { return a.t - b.t || b.imp - a.imp; });
     const shown = state.mcMore ? list : list.slice(0, 10);
     $('#mc-list').innerHTML = shown.map(macroRow).join('') || '<div class="empty">이 분류의 예정 일정이 없습니다.</div>';
     $('#mc-more').hidden = state.mcMore || list.length <= shown.length;
@@ -1278,8 +1291,8 @@
     renderEarnings();
     renderNews();
     const meta = M.meta();
-    $('#mc-note').innerHTML = '<b>확정</b> 연준·통계기관 공식 일정 · <b>규칙</b> 거래소 규정/회의 3주 뒤 의사록 · ' +
-      '<b>예상</b> 과거 발표 패턴 기반 추정입니다. CPI·PPI·고용·금통위·실적 발표일은 BLS · 한국은행 · 각 기업 IR 공지로 최종 확인하세요.' +
+    $('#mc-note').innerHTML = '<b>확정</b> 연준 · BLS · BEA · 한국은행 공식 일정과 회사가 공지한 실적 발표일 · <b>규칙</b> 거래소 규정/회의 3주 뒤 의사록 · ' +
+      '<b>예상</b> 과거 발표 패턴 기반 추정입니다. 예상 일정은 통계기관 · 각 기업 IR 공지로 최종 확인하세요.' +
       (meta.events ? '<br>일정 데이터 수집 ' + String(meta.events).slice(0, 10) : '');
     icons();
   }
@@ -1546,6 +1559,10 @@
   chipGroup('#mc-filter', function (c) { state.mcCat = c; state.mcMore = false; renderMacroList(); });
   chipGroup('#news-filter', function (c) { state.newsCat = c; renderNews(); });
   $('#mc-more').addEventListener('click', function () { state.mcMore = true; renderMacroList(); });
+  $('#mc-list').addEventListener('click', function (e) {
+    const row = e.target.closest('.tl[data-code]');
+    if (row) select(row.dataset.code);
+  });
   $('#earn-more').addEventListener('click', function () { state.earnMore = true; renderEarnings(); });
   $('#earn-list').addEventListener('click', function (e) {
     const row = e.target.closest('[data-code]');

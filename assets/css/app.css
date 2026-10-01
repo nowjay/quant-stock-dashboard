@@ -610,6 +610,10 @@ input{font-family:inherit}
 }
 .cty[data-c="KR"]{background:var(--up-weak);color:#D92D20}
 .tl[data-kind="rate"] .ic{background:var(--amber-weak);color:#B54708}
+.tl[data-kind="earn"] .ic{background:#F4F3FF;color:#5925DC}
+.tl[data-code]{cursor:pointer}
+.tl[data-code]:hover .tt{color:var(--blue-ink)}
+.cty[data-c="TW"],.cty[data-c="EU"]{background:var(--hair);color:var(--ink-2)}
 .tl[data-kind="inflation"] .ic{background:var(--up-weak);color:var(--up)}
 .tl[data-kind="jobs"] .ic{background:var(--blue-weak);color:var(--blue-ink)}
 .tl[data-kind="expiry"] .ic{background:#F4F0FF;color:#6938EF}
