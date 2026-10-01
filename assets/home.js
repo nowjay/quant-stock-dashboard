@@ -108,8 +108,8 @@ window.QT = window.QT || {};
     if (s.mode === 'error') return '<span class="led"></span>시세 연결 실패';
     return '<span class="led"></span>불러오는 중…';
   }
-  /* 스파크라인 기간 — 모든 지수 카드에 한꺼번에 적용하고, 고른 기간은 이 브라우저에 저장한다.
-     카드 숫자(전일 대비)는 그대로 두고, 그래프 아래에 그 기간의 변동률을 따로 적는다 */
+  /* 스파크라인 기간 — 전광판의 모든 지수와 환율 · 원자재 · 금리 카드에 한꺼번에 적용하고, 고른 기간은 이 브라우저에 저장한다.
+     카드 숫자(전일 대비)는 그대로 두고, 그래프 옆에 그 기간의 변동을 따로 적는다 */
   const TK_KEY = 'qt.tk.range.v1', TK_MONTHS = { '1M':1, '3M':3, '6M':6, '1Y':12 };
   const TK_LABEL = { '1M':'1개월', '3M':'3개월', '6M':'6개월', '1Y':'1년' };
   let tkRange = (function () { try { const r = localStorage.getItem(TK_KEY); return TK_MONTHS[r] ? r : '1M'; } catch (e) { return '1M'; } })();
@@ -127,6 +127,7 @@ window.QT = window.QT || {};
     tkRange = r;
     try { localStorage.setItem(TK_KEY, r); } catch (e) {}
     renderTicker();
+    renderIndicators();
   }
   function tkCard(it, group){
     const c = chgParts(it), vals = tkSeries(it);
@@ -214,15 +215,23 @@ window.QT = window.QT || {};
   const MI_GROUPS = [['fx', '환율', 'banknote'], ['cmd', '원자재 · 금속', 'fuel'], ['rate', '금리', 'landmark']];
   function miTile(it){
     const d = it.def, c = chgParts(it);
-    let vals, tone = it.d, extra = '';
+    let vals, tone = it.d, extra = '', period;
     if (d.policy){
+      /* 기준금리는 몇 달에 한 번 바뀌어 1개월 · 3개월로는 직선이 된다 — 기간 버튼과 무관하게 3년 이력 */
       vals = stepSample(it.h, 3);
+      period = '<small>최근 3년</small>';
       const p = MK.policy || {};
       if (it.k === 'BOK' && p.FED) extra = '한미 금리차 <b class="num">' + sign(p.BOK.v - p.FED.hi, 2) + '%p</b>';
       if (it.k === 'FED') extra = '최근 결정 ' + it.date.slice(2).replace(/-/g, '.');
       tone = it.d || 0;
     } else {
-      vals = it.h.slice(-66).map(function (x) { return x[1]; });
+      /* 전광판과 같은 기간. 선 색 · 변동은 그 기간 기준 (금리는 bp, 나머지는 %) */
+      vals = tkSeries(it);
+      const a = vals[0], b = vals[vals.length - 1];
+      const chg = vals.length > 1 && a ? (d.f === 'yld' ? (b - a) * 100 : (b / a - 1) * 100) : null;
+      if (chg != null) tone = chg;
+      period = '<small>' + TK_LABEL[tkRange] + '</small>' + (chg == null ? '' :
+        '<b class="num ' + cls(chg) + '">' + (d.f === 'yld' ? sign(chg, 1) + 'bp' : (chg > 0 ? '+' : chg < 0 ? '−' : '') + Math.abs(chg).toFixed(1) + '%') + '</b>');
     }
     if (it.k === 'US2Y'){
       const t10 = MK.get('US10Y');
@@ -236,6 +245,7 @@ window.QT = window.QT || {};
       '<b class="mi-v num">' + valText(it, it.p) + '</b>' +
       '<span class="mi-c num ' + cls(it.d) + '">' + c.a + (c.b ? ' <em>' + c.b + '</em>' : '') + '</span>' +
       (extra ? '<span class="mi-x">' + extra + '</span>' : '') +
+      '<span class="mi-r">' + period + '</span>' +
       spark(vals, tone, 120, 28) +
     '</button>';
   }
@@ -249,6 +259,8 @@ window.QT = window.QT || {};
         '<div class="mi-grid">' + items.map(miTile).join('') + '</div></div>';
     }).join('');
     el.innerHTML = html || '<div class="loading">' + (MK.status.mode === 'error' ? '시장 데이터를 불러오지 못했습니다.' : '불러오는 중…') + '</div>';
+    const sub = $('#mi-sub');
+    if (sub) sub.textContent = '그래프 ' + TK_LABEL[tkRange] + ' · 누르면 추세 차트';
     icons();
   }
 
@@ -560,8 +572,8 @@ window.QT = window.QT || {};
     if (!src || !LWC) return;
     pop.key = key; pop.long = null; pop.opener = opener || null;
     const ranges = popRanges(src);
-    /* 전광판 카드에서 열면 전광판에서 고른 기간으로 시작한다 */
-    const fromTk = opener && opener.classList && opener.classList.contains('tk-card') && ranges.indexOf(tkRange) >= 0;
+    /* 전광판 · 지표 카드에서 열면 '그래프 기간'에서 고른 기간으로 시작한다 */
+    const fromTk = opener && opener.classList && (opener.classList.contains('tk-card') || opener.classList.contains('mi-tile')) && ranges.indexOf(tkRange) >= 0;
     pop.range = src.step ? '5Y' : src.score ? '6M' : fromTk ? tkRange : '3M';
     $('#pop-range').innerHTML = ranges.map(function (r) { return '<button type="button" data-r="' + r + '">' + RLABEL[r] + '</button>'; }).join('');
     $('#pop-err').hidden = true;
