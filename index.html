@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/css/app.css?v=20261001f">
+<link rel="stylesheet" href="assets/css/app.css?v=20261013a">
 </head>
 <body data-view="home">
 <script>/* 마지막으로 본 화면을 먼저 적용해 깜빡임을 막는다 (app.js 의 VIEW_KEY) */
@@ -252,6 +252,12 @@
     </nav>
 
     <div id="panel-analysis" class="panel-group">
+    <section class="card pos-card">
+      <div class="card-hd"><i data-lucide="wallet"></i><h2>내 포지션</h2><span class="sub" id="posn-sub">평단가 기준</span>
+        <button type="button" class="pn-imp" id="posn-import"><i data-lucide="clipboard-paste"></i>잔고 가져오기</button></div>
+      <div class="posn" id="posn"></div>
+    </section>
+
     <section class="card sum-card">
       <div class="card-hd"><i data-lucide="scan-eye"></i><h2>한눈에 보기</h2><span class="sub">일봉 기준 · 쉬운 설명</span></div>
       <div class="summary" id="summary"></div>
@@ -280,6 +286,7 @@
         <div class="verdict" id="verdict">—</div>
         <div class="score-pill num" id="g-score">0</div>
         <div class="why" id="verdict-why">—</div>
+        <div class="mkt" id="verdict-mkt" hidden></div>
         <div class="tally">
           <div><span>매수</span><b class="up num" id="t-buy">0</b></div>
           <div><span>중립</span><b class="flat num" id="t-neut">0</b></div>
@@ -449,6 +456,36 @@
   </div>
 </div>
 
+<!-- ==================== 잔고 가져오기 (importer.js) ==================== -->
+<div class="modal sheet" id="imp" role="dialog" aria-modal="true" aria-labelledby="imp-title">
+  <div class="box imp-box">
+    <div class="m-body">
+    <h3 id="imp-title">잔고 가져오기</h3>
+    <p class="lead">증권사 잔고 화면의 표를 복사해 붙여 넣거나, 내려받은 파일을 고르세요. <b>종목명</b>(또는 종목코드)과 <b>평균단가</b> 열이 있으면 됩니다.
+      붙여 넣은 글과 파일은 이 브라우저 안에서만 읽고 어디에도 보내지 않습니다.</p>
+    <div class="field">
+      <label for="imp-text">붙여 넣기</label>
+      <textarea id="imp-text" rows="6" spellcheck="false" autocomplete="off" placeholder="종목명&#9;보유수량&#9;평균단가&#10;HPSP&#9;10&#9;65,000&#10;삼성전자&#9;12&#9;262,000"></textarea>
+      <div class="hint">열 제목 줄까지 함께 복사하세요. 직접 적을 때는 한 줄에 <b>종목 평단가 수량</b> 순서로 씁니다(수량은 생략 가능).</div>
+    </div>
+    <div class="imp-file">
+      <label class="pn-btn" for="imp-file-in"><i data-lucide="file-up"></i>파일 선택</label>
+      <input type="file" id="imp-file-in" accept=".csv,.txt,.tsv,.xlsx,.xls,.htm,.html" hidden>
+      <span id="imp-file-name"></span>
+    </div>
+    <div id="imp-out"></div>
+    <div class="imp-opts" id="imp-opts" hidden>
+      <label><input type="checkbox" id="imp-wl" checked>관심종목에도 추가</label>
+      <label id="imp-replace-wrap"><input type="checkbox" id="imp-replace">여기에 없는 기존 평단가는 지우기 <span class="muted" id="imp-replace-n"></span></label>
+    </div>
+    </div>
+    <div class="row">
+      <button class="ghost" id="imp-cancel">닫기</button>
+      <button class="primary" id="imp-apply" disabled>저장</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
@@ -459,28 +496,31 @@
     document.write('<scr' + 'ipt src="config.local.js"><\/scr' + 'ipt>');
   }
 </script>
-<script src="assets/core/fx.js?v=20261001f"></script>
-<script src="assets/core/search.js?v=20261001f"></script>
-<script src="assets/core/events.js?v=20261001f"></script>
-<script src="assets/core/markets.js?v=20261001f"></script>
-<script src="assets/core/market-data.js?v=20261001f"></script>
-<script src="assets/core/indicators.js?v=20261001f"></script>
-<script src="assets/core/scoring.js?v=20261001f"></script>
-<script src="assets/core/patterns.js?v=20261001f"></script>
-<script src="assets/core/targets.js?v=20261001f"></script>
-<script src="assets/core/analysis.js?v=20261001f"></script>
-<script src="assets/core/backtest.js?v=20261001f"></script>
-<script src="assets/core/fundamentals.js?v=20261001f"></script>
-<script src="assets/core/signal.js?v=20261001f"></script>
-<script src="assets/core/news.js?v=20261001f"></script>
-<script src="assets/feed/mock.js?v=20261001f"></script>
-<script src="assets/feed/kis.js?v=20261001f"></script>
-<script src="assets/feed/toss.js?v=20261001f"></script>
-<script src="assets/feed/index.js?v=20261001f"></script>
-<script src="assets/home.js?v=20261001f"></script>
-<script src="assets/value.js?v=20261001f"></script>
-<script src="assets/screener.js?v=20261001f"></script>
-<script src="assets/learn.js?v=20261001f"></script>
-<script src="assets/app.js?v=20261001f"></script>
+<script src="assets/core/fx.js?v=20261013a"></script>
+<script src="assets/core/search.js?v=20261013a"></script>
+<script src="assets/core/events.js?v=20261013a"></script>
+<script src="assets/core/markets.js?v=20261013a"></script>
+<script src="assets/core/market-data.js?v=20261013a"></script>
+<script src="assets/core/indicators.js?v=20261013a"></script>
+<script src="assets/core/scoring.js?v=20261013a"></script>
+<script src="assets/core/position.js?v=20261013a"></script>
+<script src="assets/core/holdings.js?v=20261013a"></script>
+<script src="assets/core/patterns.js?v=20261013a"></script>
+<script src="assets/core/targets.js?v=20261013a"></script>
+<script src="assets/core/analysis.js?v=20261013a"></script>
+<script src="assets/core/backtest.js?v=20261013a"></script>
+<script src="assets/core/fundamentals.js?v=20261013a"></script>
+<script src="assets/core/signal.js?v=20261013a"></script>
+<script src="assets/core/news.js?v=20261013a"></script>
+<script src="assets/feed/mock.js?v=20261013a"></script>
+<script src="assets/feed/kis.js?v=20261013a"></script>
+<script src="assets/feed/toss.js?v=20261013a"></script>
+<script src="assets/feed/index.js?v=20261013a"></script>
+<script src="assets/home.js?v=20261013a"></script>
+<script src="assets/value.js?v=20261013a"></script>
+<script src="assets/screener.js?v=20261013a"></script>
+<script src="assets/importer.js?v=20261013a"></script>
+<script src="assets/learn.js?v=20261013a"></script>
+<script src="assets/app.js?v=20261013a"></script>
 </body>
 </html>

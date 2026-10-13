@@ -16,6 +16,8 @@ window.QT = window.QT || {};
   /**
    * @param opts.open  마지막 봉이 아직 진행 중 (실시간 체결 중인 오늘 봉 · 이번 주/달 봉).
    *                   생략하면 끝난 봉으로 본다 — 과거 시점을 다시 계산하는 백테스트가 이 경우다
+   * @param opts.market  소속 지수 일봉 (Markets.benchmark). 주면 '지금'의 시장 상태를 종합 점수에 반영한다 (scoring.js) —
+   *                     과거 시점을 잘라 다시 계산할 때는 넘기지 않는다
    */
   function core(bars, cur, opts){
     const ind = I.set(bars), n = bars.length, open = !!(opts && opts.open);
@@ -24,7 +26,7 @@ window.QT = window.QT || {};
 
     /* ---------- 국면 인식 종합 점수 (scoring.js) ---------- */
     const rsiV = at(ind.rsi), macdV = at(ind.macd), macdS = at(ind.macdSignal), histV = at(ind.macdHist), histPrev = ind.macdHist[n - 2];
-    const sc = QT.Scoring.at(bars, ind, n - 1, { open:open });
+    const sc = QT.Scoring.at(bars, ind, n - 1, { open:open, market:opts && opts.market, now:true });
     const rows = sc.comps;
     let buy = 0, sell = 0, neutral = 0;
     rows.forEach(function (r) { if (r.v > 0.2) buy++; else if (r.v < -0.2) sell++; else neutral++; });
@@ -112,6 +114,7 @@ window.QT = window.QT || {};
     return {
       ind:ind, price:price, prevClose:prev.c, rows:rows, open:open,
       buy:buy, sell:sell, neutral:neutral, score:score, verdict:verdict, tone:tone, scoring:sc,
+      ownScore:sc.own, ownVerdict:QT.Scoring.verdictOf(sc.own), market:sc.market, capped:sc.capped,
       adx:sc.adx, regime:sc.regime, cats:sc.cats,
       stoch:at(ind.stoch), mfi:at(ind.mfi), pdi:at(ind.pdi), mdi:at(ind.mdi),
       align:align, maCross:maCross, longCross:longCross, macdCross:macdCross,
@@ -172,13 +175,13 @@ window.QT = window.QT || {};
    * @param bars  화면 봉 (종합 의견 · 지표 리포트 · 피봇)
    * @param st    종목 정보
    * @param daily 일봉 (전망 · 목표주가). 생략하면 bars 를 일봉으로 간주
-   * @param opts  { open: 화면 봉의 마지막 봉이 진행 중, dailyOpen: 마지막 일봉이 진행 중, real: 실제 일봉 여부 }
+   * @param opts  { open: 화면 봉의 마지막 봉이 진행 중, dailyOpen: 마지막 일봉이 진행 중, real: 실제 일봉 여부, market: 소속 지수 일봉 }
    */
   function run(bars, st, daily, opts){
     const cur = st && st.cur, o = opts || {};
     const sameBars = !(daily && daily.length && daily !== bars);
-    const a = core(bars, cur, { open:o.open });
-    const d = sameBars ? a : core(daily, cur, { open:o.dailyOpen });
+    const a = core(bars, cur, { open:o.open, market:o.market });
+    const d = sameBars ? a : core(daily, cur, { open:o.dailyOpen, market:o.market });
     const db = sameBars ? bars : daily;
     a.daily = d;                                          // 일봉 기준 분석 (신호 · 체크리스트 · 백테스트)
     a.forecast = { shortDir:d.shortDir, midDir:d.midDir, shortText:d.shortText, midText:d.midText };

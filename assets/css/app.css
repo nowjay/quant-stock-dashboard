@@ -752,6 +752,110 @@ a.nw:hover{border-color:var(--line);box-shadow:var(--shadow-md)}
 .rel.caution{background:var(--amber-weak);color:#B54708}
 .muted{color:var(--muted)}
 .sum-note{margin:0;font-size:10.5px;color:var(--faint)}
+/* 내 포지션 — 평단가 기준 손절 · 익절 (core/position.js) */
+.panel-group > .pos-card{grid-column:1/-1}
+.posn{padding:12px 16px 14px;display:flex;flex-direction:column;gap:10px}
+.pn-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pn-form label{display:flex;align-items:center;gap:6px;flex:1 1 150px;min-width:0;height:38px;padding:0 11px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.pn-form label:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px rgba(49,130,246,.12)}
+.pn-form.err label:first-child{border-color:var(--up)}
+.pn-form label span{flex:none;font-size:11.5px;font-weight:700;color:var(--muted)}
+.pn-form label em{flex:none;font-style:normal;font-size:11.5px;color:var(--faint)}
+.pn-form input{flex:1;min-width:0;width:100%;border:0;outline:0;background:none;font-size:13.5px;font-weight:700;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.pn-form input::placeholder{font-weight:500;color:var(--faint)}
+.pn-btn{flex:none;height:30px;padding:0 11px;border-radius:9px;background:var(--hair);color:var(--ink-2);font-size:12px;font-weight:700;white-space:nowrap}
+.pn-btn:hover{background:var(--line)}
+.pn-form .pn-btn{height:38px;padding:0 14px;border-radius:11px}
+.pn-btn.primary{background:var(--blue);color:#fff}
+.pn-btn.primary:hover{background:var(--blue-ink)}
+.pn-hint{margin:0;font-size:11.5px;line-height:1.6;color:var(--muted)}
+.pn-head{display:flex;gap:10px;align-items:flex-start}
+.pn-head p{margin:0;font-size:13.5px;line-height:1.6;font-weight:600;letter-spacing:-.02em}
+.pchip{flex:none;display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:8px;font-size:12.5px;font-weight:800;white-space:nowrap;background:var(--hair);color:var(--ink-2)}
+.pchip.cut{background:var(--down-weak);color:var(--down)}
+.pchip.take{background:var(--up-weak);color:var(--up)}
+.pchip.add{background:var(--good-weak);color:var(--good)}
+.pn-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.pn-stats div{background:var(--ground);border-radius:12px;padding:9px 11px;min-width:0}
+.pn-stats span{display:block;font-size:11px;color:var(--muted);font-weight:600}
+.pn-stats b{display:block;font-size:15px;font-weight:800;letter-spacing:-.03em;margin-top:2px}
+.pn-stats small{display:block;font-size:10.5px;color:var(--muted);margin-top:1px}
+/* 손절선(왼쪽 끝) ~ 익절선(오른쪽 끝) 사이의 현재가 위치. 세로선 = 평단가 */
+.pn-bar{position:relative;height:8px;margin:8px 7px 2px}
+.pn-bar i{position:absolute;top:0;bottom:0}
+.pn-bar i.lo{left:0;border-radius:4px 0 0 4px;background:#C7DBFD}
+.pn-bar i.hi{right:0;border-radius:0 4px 4px 0;background:#FBC7C2}
+.pn-bar .av{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;border-radius:1px;background:var(--ink-2)}
+.pn-bar .mk{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--ink);border:3px solid var(--card);box-shadow:0 0 0 1px var(--line)}
+.pn-bar .mk.out{background:var(--card);border-color:var(--ink);box-shadow:none}
+.pn-lines{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pn-lines div{min-width:0}
+.pn-lines div:last-child{text-align:right}
+.pn-lines span{display:block;font-size:11px;color:var(--muted);font-weight:600}
+.pn-lines b{display:block;font-size:13.5px;font-weight:800;letter-spacing:-.02em}
+.pn-lines small{display:block;font-size:10.5px;color:var(--muted)}
+.pn-tech{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:12px;color:var(--ink-2);padding:8px 10px;border-radius:12px;background:var(--ground)}
+.pn-tech > span:first-child{font-weight:800;color:var(--ink)}
+.pn-warn{color:#B54708;font-weight:700}
+.pn-ctl{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;font-size:11.5px;color:var(--muted)}
+.pn-step{display:inline-flex;align-items:center;gap:5px;font-weight:700}
+.pn-step button{width:24px;height:24px;border-radius:7px;background:var(--hair);color:var(--ink-2);font-size:14px;font-weight:700;line-height:1}
+.pn-step button:hover{background:var(--line)}
+.pn-step b{min-width:22px;text-align:center;color:var(--ink);font-weight:800}
+.pn-sp{flex:1}
+@media (max-width:900px){
+  .pn-form input{font-size:16px}                         /* iOS 자동 확대 방지 */
+  .pn-form label,.pn-form .pn-btn{height:44px}
+  .pn-btn{height:36px}
+  .pn-step button{width:30px;height:30px}
+  .pn-ctl{gap:8px 10px}
+  .pn-sp{flex-basis:100%;height:0}                       /* 배수 조정 한 줄 · 수정/삭제 버튼 한 줄 */
+}
+
+/* 잔고 가져오기 (importer.js) */
+.pn-imp{flex:none;display:inline-flex;align-items:center;gap:5px;height:28px;margin-left:8px;padding:0 10px;border-radius:8px;background:var(--blue-weak);color:var(--blue-ink);font-size:11.5px;font-weight:700;white-space:nowrap}
+.pn-imp:hover{background:#DCE9FD}
+.card-hd .pn-imp [data-lucide]{width:13px;height:13px;color:inherit}
+.modal .imp-box{width:min(640px,100%)}
+.field textarea{width:100%;min-height:118px;border-radius:11px;border:1px solid var(--line);padding:10px 12px;font:inherit;font-size:12.5px;line-height:1.55;color:var(--ink);outline:none;background:#fff;resize:vertical;white-space:pre;overflow:auto;tab-size:12}
+.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(49,130,246,.12)}
+.field .hint b{color:var(--ink-2)}
+.imp-file{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:11.5px;color:var(--muted)}
+.imp-file .pn-btn{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.imp-file [data-lucide]{width:14px;height:14px}
+.imp-file span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-msg{font-size:12px;line-height:1.6;padding:9px 11px;border-radius:12px;margin-bottom:10px;background:var(--ground);color:var(--ink-2)}
+.imp-msg.ok{background:#ECFDF3;color:#05603A}
+.imp-msg.miss{background:var(--amber-weak);color:#93370D}
+.imp-msg.bad{background:#FEE4E2;color:#B42318}
+.imp-msg ul{margin:4px 0 0;padding-left:16px}
+.imp-t{border:1px solid var(--hair);border-radius:12px;overflow:hidden;margin-bottom:10px}
+.imp-r{display:grid;grid-template-columns:22px minmax(0,1fr) 88px 52px 70px 86px;align-items:center;column-gap:8px;padding:8px 11px;font-size:12px;cursor:pointer}
+.imp-r + .imp-r{border-top:1px solid var(--hair)}
+.imp-r.hd{padding:6px 11px;font-size:10.5px;font-weight:700;color:var(--muted);background:var(--ground);cursor:default}
+.imp-r.hd span:nth-child(n+3),.imp-r .num{text-align:right}
+.imp-r.far{background:#FFFBF3}
+.imp-r input{width:15px;height:15px;margin:0;accent-color:var(--blue)}
+.imp-r .nm{min-width:0}
+.imp-r .nm b{font-weight:700;margin-right:5px}
+.imp-r .nm small{font-size:10.5px;color:var(--faint)}
+.imp-r .nm i{display:block;font-style:normal;font-size:10.5px;line-height:1.4;color:#B54708}
+.imp-r .st{text-align:right;white-space:nowrap}
+.imp-r .st small{display:block;font-size:10px;color:var(--muted)}
+.imp-tag{font-style:normal;font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:6px;background:var(--hair);color:var(--ink-2)}
+.imp-tag.new{background:var(--good-weak);color:var(--good)}
+.imp-tag.chg{background:var(--blue-weak);color:var(--blue-ink)}
+.imp-opts{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-2);margin-bottom:4px}
+.imp-opts[hidden],#imp-replace-wrap[hidden]{display:none}
+.imp-opts label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.imp-opts input{width:15px;height:15px;margin:0;accent-color:var(--blue)}
+.modal .row button:disabled{opacity:.45;cursor:default}
+@media (max-width:900px){ .field textarea{font-size:16px} }        /* iOS 자동 확대 방지 */
+@media (max-width:560px){                                           /* 좁은 화면: 수량 · 상태는 접고 종목 · 평단가 · 수익률만 */
+  .imp-r{grid-template-columns:22px minmax(0,1fr) 84px 64px}
+  .imp-r > :nth-child(4),.imp-r > :nth-child(6){display:none}
+}
+
 /* 분석 신뢰도 (입력 데이터 품질) — 보통: 주의, 낮음: 의견 · 목표가 보류 */
 .ql{font-size:12px;line-height:1.6;padding:9px 11px;border-radius:12px;background:var(--amber-weak);color:#93370D}
 .ql > b:first-child{display:flex;align-items:center;gap:4px;font-weight:800;margin-bottom:2px}
@@ -767,6 +871,16 @@ a.nw:hover{border-color:var(--line);box-shadow:var(--shadow-md)}
 .regime{font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:var(--hair);color:var(--ink-2)}
 .regime[data-r="trend"]{background:#F4F0FF;color:#6938EF}
 .regime[data-r="range"]{background:var(--amber-weak);color:#B54708}
+/* 시장(소속 지수) 반영 — 게이지 아래 한 줄 · 한눈에 보기 경고 */
+.gauge .mkt{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 6px;font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:6px}
+.gauge .mkt[hidden]{display:none}
+.mkt small{font-size:10.5px;color:var(--faint)}
+.mkt b{color:var(--ink-2)}
+.mkt-chip{flex:none;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:var(--hair);color:var(--ink-2)}
+.mkt-chip.risk{background:var(--amber-weak);color:#B54708}
+.mkw{font-size:12px;line-height:1.6;padding:9px 11px;border-radius:12px;background:var(--amber-weak);color:#93370D}
+.mkw > b:first-child{display:flex;align-items:center;gap:4px;font-weight:800;margin-bottom:2px}
+.mkw .muted{color:inherit;opacity:.75}
 .cats{display:flex;flex-direction:column;gap:7px;margin-top:14px;text-align:left}
 .cat{display:grid;grid-template-columns:48px 1fr 40px;align-items:center;gap:8px;font-size:12px}
 .cat > span:first-child{color:var(--ink-2);font-weight:700}
@@ -1253,6 +1367,7 @@ body.fs-lock{overflow:hidden}
 .sg-foot b{font-size:18px;font-weight:800;letter-spacing:-.03em}
 .sg-foot small{font-size:11px;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .muted.sm{font-size:11.5px;margin:2px 0 0}
+.sg-mk{margin:0;font-size:11.5px;line-height:1.55;padding:8px 10px;border-radius:10px;background:var(--amber-weak);color:#93370D}
 
 /* ---------- AI 가치분석 요약 ---------- */
 .vsum{padding:12px 16px 14px;display:flex;flex-direction:column;gap:10px}
@@ -1414,6 +1529,7 @@ body.fs-lock{overflow:hidden}
 .scr-head span{color:var(--muted);font-weight:600;white-space:nowrap}
 .scr-head em{font-style:normal;font-weight:800;color:var(--good);font-size:13px;margin-right:1px}
 .scr-skip{padding:0 6px 6px;font-size:10.5px;color:var(--faint)}
+.scr-skip.mk{color:#B54708}
 .scr-loading{padding:28px 10px}
 .scr-card{display:flex;flex-direction:column;gap:5px;padding:10px 10px 9px;border-radius:12px;cursor:pointer;border:1px solid var(--hair);margin-bottom:6px;transition:background .13s,border-color .13s}
 .scr-card:hover{background:var(--ground)}

@@ -56,18 +56,20 @@ window.QT = window.QT || {};
   /**
    * @param horizon  신호 뒤 수익률을 볼 봉 수 (기본 10 = 약 2주)
    * @param opts.open  마지막 봉이 진행 중 (오늘 등급을 화면과 같은 기준으로 계산)
+   * @param opts.market  소속 지수 일봉 — 과거 봉은 그 날짜까지의 지수로, 오늘 등급은 지금의 지수로 시장 급락을 반영한다.
+   *                     지수 일봉이 없는 오래된 날은 종목 점수 그대로다
    * @returns {horizon, cls, label, same, base, byClass, rel, from}
    */
   function signals(bars, ind, horizon, opts){
-    const H = horizon || 10, n = bars.length, c = ind.close;
+    const H = horizon || 10, n = bars.length, c = ind.close, past = opts && opts.market ? { market:opts.market } : null;
     const start = Math.min(200, Math.max(60, n - 300));
     const by = { '-2':[], '-1':[], '0':[], '1':[], '2':[] }, at = { '-2':[], '-1':[], '0':[], '1':[], '2':[] }, all = [];
     for (let i = start; i < n - H; i++){
-      const r = (c[i + H] - c[i]) / c[i] * 100, k = S.classOf(S.at(bars, ind, i).score);
+      const r = (c[i + H] - c[i]) / c[i] * 100, k = S.classOf(S.at(bars, ind, i, past).score);
       by[k].push(r); at[k].push(i);
       all.push(r);
     }
-    const cls = S.classOf(S.at(bars, ind, n - 1, opts).score);
+    const cls = S.classOf(S.at(bars, ind, n - 1, Object.assign({ now:true }, opts)).score);
     /* 표본이 적으면 같은 방향(매수 계열/매도 계열)으로 묶어서 본다 */
     let pool = by[cls], idx = at[cls], label = S.verdictOf([ -70, -30, 0, 30, 70 ][cls + 2]);
     if (pool.length < 15 && cls !== 0){

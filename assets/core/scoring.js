@@ -11,6 +11,14 @@
          추세장 : 추세 그룹 비중↑, 과매수/과매도는 '과열 경고' 정도로만
          횡보장 : 오실레이터의 과매수/과매도(되돌림) 신호 비중↑
      · 같은 함수를 과거 모든 봉에 적용할 수 있어 신호 신뢰도 백테스트에 그대로 사용
+
+   시장(종합 지수) 반영
+     · 위 지표는 모두 그 종목의 일봉에서 나온다 — 시장 전체가 무너지는 날은 종목 차트만으로 알 수 없다
+     · 소속 지수(코스피 · 코스닥 · 나스닥 · S&P 500)가 당일 −2% 이하이거나 3거래일 누적 −3% 이하이면 '시장 급락'으로 보고
+       종합 점수를 +54(매수)로 제한한다 — 강력 매수를 내지 않는다
+     · 2026-10 측정(tools/verify_ta.js --report ④, 국내 시가총액 상위 200종목 · 약 1년): 강력 매수 다음 날 −5% 이하로 빠진 비율이
+       시장 급락 상태 20% · 그 밖 9%. 다만 10일 뒤 수익률은 낮지 않았다 — 하락 예측이 아니라 변동폭 경고이므로
+       등급을 매도로 내리지는 않고, 매수 이하 등급은 그대로 둔다. 미국 종목은 표본이 적어 확인하지 못한 채 같은 기준을 쓴다
    ============================================================= */
 window.QT = window.QT || {};
 (function (QT) {
@@ -21,6 +29,39 @@ window.QT = window.QT || {};
   function pct(a, b){ return (a - b) / b * 100; }
 
   const CATS = { trend:'추세', momentum:'모멘텀', volume:'거래량' };
+
+  /* 시장 급락 기준(%) · 그때의 점수 상한(강력 매수 55 바로 아래) · 지수 일봉이 이보다 오래 비면(달력 일) 판단하지 않음 */
+  const MARKET = { day:-2, d3:-3, cap:54, stale:5 };
+  function ymd(t){ const d = new Date(t); return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate(); }
+  function dayGap(a, b){
+    const ms = function (v) { return Date.UTC(Math.floor(v / 10000), Math.floor(v / 100) % 100 - 1, v % 100); };
+    return (ms(b) - ms(a)) / 86400000;
+  }
+  /**
+   * 소속 지수의 상태
+   * @param mk   { key, name, h:[[yyyymmdd, 종가], …] 오름차순, r?:실시간 등락률(%), day?:그 시세의 날짜 } — Markets.benchmark()
+   * @param day  이 날짜(yyyymmdd)까지의 지수로 판단 (과거 봉 · 미래 데이터 사용 없음)
+   * @param now  지수의 가장 최근 값으로 판단 — 화면의 '지금' 의견. 종목 일봉이 하루 이틀 늦어도 시장은 현재 상태를 본다
+   * @returns {key, name, day, d1, d3, risk, by:'day'|'d3'|'both'|null} 지수 일봉이 없거나 날짜가 맞지 않으면 null
+   */
+  function marketAt(mk, day, now){
+    const h = mk && mk.h;
+    if (!h || h.length < 2) return null;
+    let k = h.length - 1;
+    if (now){ if (day != null && dayGap(h[k][0], day) > MARKET.stale) return null; }
+    else {
+      if (day == null || h[0][0] > day) return null;
+      let lo = 0;
+      while (lo < k){ const m = (lo + k + 1) >> 1; if (h[m][0] <= day) lo = m; else k = m - 1; }
+      if (dayGap(h[k][0], day) > MARKET.stale) return null;
+    }
+    if (k < 1 || !(h[k - 1][1] > 0)) return null;
+    /* 스냅샷 일봉이 하루 비어 있어도 당일 등락은 맞도록, 지금 시세에 딸린 등락률이 있으면 그 값을 쓴다 */
+    const d1 = now && fin(mk.r) && mk.day === h[k][0] ? mk.r : pct(h[k][1], h[k - 1][1]);
+    const d3 = k >= 3 && h[k - 3][1] > 0 ? pct(h[k][1], h[k - 3][1]) : null;
+    const byDay = d1 <= MARKET.day, by3 = d3 != null && d3 <= MARKET.d3;
+    return { key:mk.key, name:mk.name, day:h[k][0], d1:d1, d3:d3, risk:byDay || by3, by: byDay && by3 ? 'both' : byDay ? 'day' : by3 ? 'd3' : null };
+  }
 
   /** 과매수/과매도 오실레이터: 추세장에서는 방향 확인, 횡보장에서는 되돌림 신호 */
   function osc(v, hi, lo, mid, trendStr, dir){
@@ -35,7 +76,10 @@ window.QT = window.QT || {};
    * i 번째 봉 시점의 점수 (미래 데이터 사용 없음)
    * @param opts.open  마지막 봉이 아직 진행 중 — 그 봉의 거래량은 하루(한 주 · 한 달)치가 아니므로
    *                   거래량 그룹은 직전에 끝난 봉까지로 계산한다
-   * @returns {score, regime, adx, trendStr, cats:{trend,momentum,volume}, comps:[{cat,key,name,v,value}]}
+   * @param opts.market  소속 지수 일봉 (marketAt 의 mk). 주면 시장 급락 때 점수를 MARKET.cap 으로 제한한다
+   * @param opts.now     마지막 봉을 '지금'으로 본다 — 지수는 그 봉의 날짜가 아니라 가장 최근 값으로 판단
+   * @returns {score, own, market, capped, regime, adx, trendStr, cats:{trend,momentum,volume}, comps:[{cat,key,name,v,value}]}
+   *          own = 시장을 반영하기 전 종목 자체 점수
    */
   function at(bars, ind, i, opts){
     const c = ind.close, p = c[i], comps = [];
@@ -87,9 +131,11 @@ window.QT = window.QT || {};
     const w = { trend:0.3 + 0.25 * trendStr, momentum:0.45 - 0.2 * trendStr, volume:0.25 };
     let raw = 0, ws = 0;
     Object.keys(w).forEach(function (k) { if (cats[k] != null){ raw += w[k] * cats[k]; ws += w[k]; } });
-    const score = ws ? clamp(Math.round(raw / ws * 125), -100, 100) : 0;
+    const own = ws ? clamp(Math.round(raw / ws * 125), -100, 100) : 0;
+    const mkt = opts && opts.market ? marketAt(opts.market, ymd(bars[i].t), !!opts.now && i === bars.length - 1) : null;
+    const score = mkt && mkt.risk ? Math.min(own, MARKET.cap) : own;
     return {
-      score:score, cats:cats, comps:comps, adx:adx, trendStr:trendStr, dir:dir,
+      score:score, own:own, market:mkt, capped:score !== own, cats:cats, comps:comps, adx:adx, trendStr:trendStr, dir:dir,
       regime: !fin(adx) ? 'na' : adx >= 25 ? 'trend' : adx < 20 ? 'range' : 'weak',
       weights:w
     };
@@ -100,5 +146,5 @@ window.QT = window.QT || {};
   }
   function classOf(score){ return score >= 55 ? 2 : score >= 18 ? 1 : score > -18 ? 0 : score > -55 ? -1 : -2; }
 
-  QT.Scoring = { at:at, CATS:CATS, verdictOf:verdictOf, classOf:classOf };
+  QT.Scoring = { at:at, CATS:CATS, MARKET:MARKET, marketAt:marketAt, dayOf:ymd, verdictOf:verdictOf, classOf:classOf };
 })(window.QT);

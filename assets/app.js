@@ -493,16 +493,19 @@
     if (!chart.ready) return;
     const t = analysis && analysis.targets;
     const on = state.ind.tgt && t;
-    const key = on ? [t.short.base.v, t.mid.base.v, t.short.stop.v].join('|') : '';
+    /* 평단가를 넣은 종목은 평단가 · 평단 손절선 · 익절선도 함께 그린다 (축을 넓히지는 않는다 — 평단가가 멀면 차트가 납작해진다) */
+    const j = state.ind.tgt && analysis ? posOf(M.BY_CODE[state.code], analysis) : null;
+    const key = (on ? [t.short.base.v, t.mid.base.v, t.short.stop.v].join('|') : '') + (j ? '#' + [j.avg, j.stop.v, j.take.v].join('|') : '');
     if (key === tgtKey) return;
     tgtKey = key;
     tgtLines.forEach(function (l) { chart.series.candle.removePriceLine(l); });
     tgtLines = [];
     const daily = state.tf === '1D' || state.tf === '1W' || state.tf === '1M';
     tgtRange = on && daily ? { min:t.short.stop.v, max:t.short.base.v } : null;
-    if (!on) return;
-    [[t.short.base.v, COLORS.up, '단기 목표'], [t.mid.base.v, '#F97066', '중장기 목표'], [t.short.stop.v, COLORS.down, '손절']].forEach(function (d) {
-      tgtLines.push(chart.series.candle.createPriceLine({ price:d[0], color:d[1], lineWidth:1, lineStyle:2, axisLabelVisible:true, title:d[2] }));
+    const lines = on ? [[t.short.base.v, COLORS.up, '단기 목표', 2], [t.mid.base.v, '#F97066', '중장기 목표', 2], [t.short.stop.v, COLORS.down, '손절', 2]] : [];
+    if (j) lines.push([j.avg, POS_COLOR, '평단', 0], [j.take.v, POS_COLOR, '평단 익절', 1], [j.stop.v, POS_COLOR, '평단 손절', 1]);
+    lines.forEach(function (d) {
+      if (d[0] > 0) tgtLines.push(chart.series.candle.createPriceLine({ price:d[0], color:d[1], lineWidth:1, lineStyle:d[3], axisLabelVisible:true, title:d[2] }));
     });
   }
   function pushLastBar(){
@@ -740,7 +743,9 @@
 
   /* ---------------- 용어 설명 (? 버튼) ---------------- */
   const GLOSS = {
-    score:'종합 점수: 추세 · 모멘텀 · 거래량 지표를 −100~+100으로 합산합니다. 추세가 뚜렷할 때(ADX 높음)는 추세 지표 비중을, 횡보장에서는 과매수·과매도 지표 비중을 높입니다. 등급은 지금의 추세 상태를 요약한 것이며 수익 예측이 아닙니다 — 과거 검증에서 등급과 10거래일 뒤 수익률 사이에 통계적으로 유의한 관계는 없었습니다.',
+    score:'종합 점수: 추세 · 모멘텀 · 거래량 지표를 −100~+100으로 합산합니다. 추세가 뚜렷할 때(ADX 높음)는 추세 지표 비중을, 횡보장에서는 과매수·과매도 지표 비중을 높입니다. 소속 지수가 급락 중이면 점수를 +54(매수)로 제한합니다. 등급은 지금의 추세 상태를 요약한 것이며 수익 예측이 아닙니다 — 과거 검증에서 등급과 10거래일 뒤 수익률 사이에 통계적으로 유의한 관계는 없었습니다.',
+    pos:'내 포지션: 입력한 평단가를 기준으로 손절선(평단가 − 2 ATR)과 익절선(평단가 + 3 ATR)을 긋고, 현재가가 손절선 이하면 매도·손절, 익절선 이상이면 매도·익절, 그 사이면 보유로 표시합니다. ATR은 최근 14일의 하루 평균 변동폭이라, 많이 움직이는 종목은 폭이 넓고 덜 움직이는 종목은 좁습니다(배수는 아래에서 조정). 추가 매수 가능은 ① 종합 의견이 매수 이상 ② 시장 급락이 아님 ③ 익절선까지 남은 폭이 손절선까지보다 큼, 세 가지를 모두 만족할 때만 나옵니다. 차트로 계산하는 종합 의견 등급은 평단가와 무관하게 그대로입니다. 과거 검증(국내 종목 · 상승장 구간)에서 기본 배수는 20거래일 안에 손절선에 먼저 닿은 경우 39%, 익절선 40%였고 평균 손익은 선 없이 그냥 보유한 것보다 낮았습니다 — 수익을 늘리는 규칙이 아니라 한 번의 손실 · 이익 폭을 미리 정해 두는 규칙입니다. 평단가는 이 브라우저에만 저장됩니다.',
+    market:'시장 반영: 종목 지표는 그 종목의 차트만 보기 때문에 시장 전체가 무너지는 날을 알 수 없습니다. 그래서 소속 지수(코스피 · 코스닥 종목은 해당 지수, 미국 종목은 나스닥 종합 · S&P 500 편입 종목은 S&P 500)가 하루 −2% 이하이거나 3거래일 누적 −3% 이하이면 시장 급락으로 보고 강력 매수를 내지 않습니다(점수 상한 +54). 국내 종목 과거 검증에서 강력 매수 종목이 다음 날 −5% 이상 빠진 비율이 평소 9%, 시장 급락 때 20%였습니다. 다만 10거래일 뒤 수익률은 낮지 않았습니다 — 하락 예측이 아니라 변동폭이 커진다는 경고이므로 매도로 내리지는 않습니다. ETF는 적용하지 않습니다.',
     rsi:'RSI(상대강도지수): 최근 14일 상승폭과 하락폭의 비율(0~100). 70 이상 과매수, 30 이하 과매도. 강한 상승 추세에서는 70 이상이 오래 이어지기도 합니다.',
     macd:'MACD: 12일과 26일 지수이동평균의 차이. 시그널선(9일 평균)을 위로 뚫으면 상승 힘이 붙는 것, 아래로 뚫으면 힘이 빠지는 것으로 봅니다.',
     bb:'볼린저 밴드: 20일 평균 ± 표준편차×2. 주가는 대부분(실제 일봉 기준 약 90%) 밴드 안에서 움직이며, 밴드가 좁아지면 곧 큰 움직임이 나올 가능성이 큽니다.',
@@ -757,7 +762,7 @@
     bt:'백테스트: 같은 계산을 이 종목의 과거 날짜마다 적용해, 비슷한 신호 뒤 실제 주가가 어떻게 움직였는지 집계한 값입니다. 매일 뽑은 표본은 10거래일 구간이 서로 겹쳐 같은 움직임을 여러 번 세므로, 겹치지 않는 표본 수로 오차를 계산해 아무 날이나 샀을 때(기저)와 통계적으로 유의하게(95%) 다를 때만 잘 맞았다 / 안 맞았다고 표시합니다. 과거 성과가 미래를 보장하지는 않습니다.',
     fng:'공포 & 탐욕 지수(CNN): 미국 증시의 투자 심리를 0~100으로 나타냅니다. 25 미만 극심한 공포 · 45 미만 공포 · 55 이하 중립 · 75 이하 탐욕 · 그 이상 극심한 탐욕. 극단적인 공포는 저가 매수 기회, 극단적인 탐욕은 과열 경고로 보는 역발상 지표로도 씁니다.',
     krs:'국장 심리지수(QUANT 자체 계산): 코스피 125일선 괴리 · 52주 위치 · RSI · 20일 변동성 · 원/달러 20일 변화 · 코스닥 상대강도를 최근 1년 분포 대비 백분위(0~100)로 바꿔 평균했습니다. 단계 기준은 CNN 지수와 같습니다(25 · 45 · 55 · 75).',
-    signal:'종합 매수 신호: 기술 점수(이동평균선 방향 · RSI · MACD · 피봇 저항 돌파, 각 25점)와 재무 점수(업종 대비 PER · PBR, ROE 10% 이상, 영업이익 전년 대비 증가, 각 25점)를 반씩 합친 0~100점입니다. 80점 이상 강력 매수 · 65~79 매수 · 45~64 중립 · 30~44 매도 · 30 미만 강력 매도. 재무 건전성이 낮으면 재무 점수에서 최대 10점을 뺍니다.',
+    signal:'종합 매수 신호: 기술 점수(이동평균선 방향 · RSI · MACD · 피봇 저항 돌파, 각 25점)와 재무 점수(업종 대비 PER · PBR, ROE 10% 이상, 영업이익 전년 대비 증가, 각 25점)를 반씩 합친 0~100점입니다. 80점 이상 강력 매수 · 65~79 매수 · 45~64 중립 · 30~44 매도 · 30 미만 강력 매도. 재무 건전성이 낮으면 재무 점수에서 최대 10점을 뺍니다. 소속 지수가 급락 중(하루 −2% 이하 · 3거래일 −3% 이하)이면 기술 · 종합 점수를 79점(매수)으로 제한합니다.',
     per:'PER(주가수익비율): 주가 ÷ 최근 4분기 주당순이익. 이익 대비 몇 배에 거래되는지를 뜻하며, 같은 업종 평균보다 낮으면 상대적으로 싸다고 봅니다.',
     fper:'선행 PER: 주가 ÷ 증권사들이 예상한 올해(회계연도) 주당순이익. 현재 PER보다 낮으면 앞으로 이익이 늘 것으로 기대된다는 뜻입니다.',
     pbr:'PBR(주가순자산비율): 주가 ÷ 주당순자산. 1배 미만이면 회사가 가진 순자산보다 싸게 거래되는 상태입니다. 다만 이익을 못 내는 회사는 계속 싸게 머물 수 있습니다.',
@@ -774,7 +779,7 @@
   };
   /* 용어 설명 '?' → 주식 공부의 해당 주제 (assets/learn/data-*.js 의 id) */
   const LEARN_OF = {
-    score:'ta', rsi:'rsi', macd:'macd', bb:'bb', adx:'adx', mfi:'volind', obv:'volind', ma:'ma', stoch:'stoch', cross:'cross', div:'div',
+    score:'ta', market:'riskreturn', pos:'stoploss', rsi:'rsi', macd:'macd', bb:'bb', adx:'adx', mfi:'volind', obv:'volind', ma:'ma', stoch:'stoch', cross:'cross', div:'div',
     pivot:'pivot', mtf:'trend', bt:'backtest', fng:'sentiment', krs:'sentiment', per:'per', fper:'per', pbr:'pbr', roe:'roe', ev:'ev',
     dy:'dividend', peg:'peg', fcf:'cashflow', health:'health', debt:'health', icr:'health', reserve:'health', fair:'dcf'
   };
@@ -824,6 +829,118 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
   })();
 
+  /* ---------------- 시장(소속 지수) 반영 ---------------- */
+  function benchOf(st){ return QT.Markets && QT.Markets.benchmark ? QT.Markets.benchmark(st) : null; }
+  /* 코스닥 −4.8% · 3일 −7.7% */
+  function mktText(m){ return m.name + ' ' + pct1(m.d1) + (m.d3 != null ? ' · 3일 ' + pct1(m.d3) : ''); }
+  function mktDay(m){ const d = String(m.day); return d.slice(4, 6) + '.' + d.slice(6, 8); }
+  /* 게이지 아래 한 줄 — 평소에는 지수 등락만, 급락이면 등급을 낮춘 사실까지 */
+  function paintMarket(a){
+    const mk = a.quality.level === 'low' ? null : a.market, el = $('#verdict-mkt');
+    el.hidden = !mk;
+    if (mk) el.innerHTML = '<span class="mkt-chip' + (mk.risk ? ' risk' : '') + '">' + (mk.risk ? '시장 급락' : '시장') + '</span>' +
+      '<span>' + mktText(mk) + ' <small>' + mktDay(mk) + '</small>' +
+      (a.capped ? ' — 종목 점수는 <b>' + a.ownVerdict + '</b>이지만 <b>' + a.verdict + '</b>로 낮췄습니다' : '') + '</span>' + tip('market');
+  }
+
+  /* ---------------- 내 포지션 (평단가 기준 — core/position.js) ----------------
+     평단가 · 수량은 이 브라우저(localStorage)에만 저장한다. 손절 · 익절 배수는 모든 종목 공통 */
+  const POS_KEY = 'qt.pos.v1', POS_COLOR = '#7A5AF8', PN = QT.Position;
+  const pos = (function () {
+    const d = { rule:{ stop:PN.RULE.stop, take:PN.RULE.take }, items:{} };
+    try {
+      const s = JSON.parse(localStorage.getItem(POS_KEY));
+      if (s && s.items) d.items = s.items;
+      if (s && s.rule){ d.rule.stop = PN.mult(s.rule.stop, d.rule.stop); d.rule.take = PN.mult(s.rule.take, d.rule.take); }
+    } catch (e) {}
+    return d;
+  })();
+  function savePos(){ try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch (e) {} }
+  let posEdit = null, posShown = null;               // 입력 중인 종목 · 마지막으로 그린 내용 (실시간 틱마다 입력창을 다시 그리지 않는다)
+  /* 변동폭(ATR)은 실제 일봉에서 나와야 한다 — 분석 신뢰도가 낮으면(시뮬레이션 · 거래정지 · 봉 부족) 판단하지 않는다 */
+  function posOf(st, a){
+    const it = pos.items[st.code];
+    if (!it || !a || a.quality.level === 'low') return null;
+    const d = a.daily;
+    return PN.judge({ avg:it.avg, qty:it.qty, price:d.price, atr:d.atr, score:d.score, market:d.market, rule:pos.rule });
+  }
+  function numIn(s){ const v = parseFloat(String(s == null ? '' : s).replace(/[^0-9.]/g, '')); return isFinite(v) && v > 0 ? v : null; }
+  function posForm(st, it){
+    return '<form class="pn-form" id="posn-form" autocomplete="off">' +
+      '<label><span>평단가</span><input id="posn-avg" inputmode="decimal" placeholder="' + (st.cur === 'USD' ? '예: 182.50' : '예: 65,000') + '" value="' + (it ? plain(it.avg, st.cur) : '') + '"><em>' + (st.cur === 'USD' ? '달러' : '원') + '</em></label>' +
+      '<label><span>수량</span><input id="posn-qty" inputmode="decimal" placeholder="선택" value="' + (it && it.qty ? it.qty : '') + '"><em>주</em></label>' +
+      '<button type="submit" class="pn-btn primary">저장</button>' + (it ? '<button type="button" class="pn-btn" data-act="cancel">취소</button>' : '') + '</form>' +
+      '<p class="pn-hint">보유 종목의 평단가를 넣으면 그 가격을 기준으로 손절선 · 익절선과 매도 · 추가 매수 판단을 보여 줍니다. 종합 의견 등급은 그대로 함께 표시합니다. 이 브라우저에만 저장됩니다.' + tip('pos') + '</p>';
+  }
+  function posCtl(){
+    const step = function (k, name) {
+      return '<span class="pn-step">' + name + '<button type="button" data-act="' + k + '-" aria-label="' + name + ' 배수 줄이기">−</button><b class="num">' + pos.rule[k] + '</b>' +
+        '<button type="button" data-act="' + k + '+" aria-label="' + name + ' 배수 늘리기">+</button>ATR</span>';
+    };
+    return '<div class="pn-ctl">' + step('stop', '손절') + step('take', '익절') + '<span class="pn-sp"></span>' +
+      '<button type="button" class="pn-btn" data-act="edit">평단가 수정</button><button type="button" class="pn-btn" data-act="del">삭제</button></div>';
+  }
+  function renderPosition(st, a){
+    const el = $('#posn'), it = pos.items[st.code];
+    if (posEdit && posEdit !== st.code) posEdit = null;
+    if (!it || posEdit){
+      const key = 'form|' + st.code + '|' + !!it;
+      if (posShown !== key){ el.innerHTML = posForm(st, it); posShown = key; $('#posn-sub').textContent = '평단가 기준'; }
+      return;
+    }
+    const j = posOf(st, a), cur = st.cur;
+    let html;
+    if (!j){
+      html = '<div class="pn-head"><span class="pchip hold">판단 보류</span><p>평단가 <b>' + price(it.avg, cur) + '</b>' + (it.qty ? ' · ' + it.qty.toLocaleString('ko-KR') + '주' : '') + ' — ' +
+        (a ? '이 종목은 일봉 데이터를 믿기 어려워 변동폭(ATR)으로 손절선 · 익절선을 긋지 않습니다.' : '시세 데이터가 없어 판단할 수 없습니다.') + '</p></div>' + posCtl();
+    } else {
+      const d = a.daily, t = a.targets, inside = j.action === 'add' || j.action === 'hold';
+      const say = j.action === 'cut' ? '현재가가 <b>손절선</b>(평단가 − ' + j.rule.stop + ' ATR) 아래입니다.'
+        : j.action === 'take' ? '현재가가 <b>익절선</b>(평단가 + ' + j.rule.take + ' ATR) 위입니다.'
+        : (j.action === 'add' ? '손절선과 익절선 사이이고 추가 매수 조건을 모두 충족합니다.' : '손절선과 익절선 사이입니다.') +
+          (j.near === 'stop' ? ' <b>손절선까지 ' + pct1(j.stop.pct) + '</b> 남았습니다.' : j.near === 'take' ? ' <b>익절선까지 ' + pct1(j.take.pct) + '</b> 남았습니다.' : '');
+      const mark = Math.max(0, Math.min(100, j.pos * 100)), av = j.avgPos * 100;
+      /* 선을 이미 지났으면 '현재가에서 +5%' 가 아니라 얼마나 지났는지로 쓴다 */
+      const gap = function (line, word) { return '현재가가 ' + Math.abs((j.price / line.v - 1) * 100).toFixed(1) + '% ' + word; };
+      const stopNote = j.action === 'cut' ? gap(j.stop, '아래') : '현재가에서 ' + pct1(j.stop.pct);
+      const takeNote = j.action === 'take' ? gap(j.take, '위') : '현재가에서 ' + pct1(j.take.pct);
+      const condText = {
+        trend:'종합 의견이 매수 이상 <span class="muted">(지금 ' + d.verdict + ')</span>',
+        market:'시장 급락이 아님 <span class="muted">(' + (d.market ? mktText(d.market) : '지수 없음 — 판단에서 제외') + ')</span>',
+        room:'익절선까지 남은 폭이 손절선까지보다 큼 <span class="muted">(' + pct1(j.take.pct) + ' 대 ' + pct1(j.stop.pct) + ')</span>'
+      };
+      html = '<div class="pn-head"><span class="pchip ' + j.tone + '">' + j.label + '</span><p>' + say + tip('pos') + '</p></div>' +
+        '<div class="pn-stats">' +
+          '<div><span>평단가' + (j.qty ? ' · ' + j.qty.toLocaleString('ko-KR') + '주' : '') + '</span><b class="num">' + price(j.avg, cur) + '</b></div>' +
+          '<div><span>현재가</span><b class="num">' + price(j.price, cur) + '</b></div>' +
+          '<div><span>수익률</span><b class="num ' + cls(j.pnl) + '">' + pct(j.pnl) + '</b><small class="num">' + (j.pnlAtr > 0 ? '+' : j.pnlAtr < 0 ? '−' : '') + Math.abs(j.pnlAtr).toFixed(1) + ' ATR</small></div>' +
+          (j.amount != null ? '<div><span>평가손익</span><b class="num ' + cls(j.amount) + '">' + signed(j.amount, cur) + '</b></div>' : '') +
+        '</div>' +
+        '<div class="pn-bar" aria-hidden="true"><i class="lo" style="width:' + av + '%"></i><i class="hi" style="left:' + av + '%"></i>' +
+          '<span class="av" style="left:' + av + '%"></span><span class="mk' + (j.pos < 0 || j.pos > 1 ? ' out' : '') + '" style="left:' + mark + '%"></span></div>' +
+        '<div class="pn-lines">' +
+          '<div><span>손절선</span><b class="num">' + (j.stop.v > 0 ? price(j.stop.v, cur) : '—') + '</b><small class="num">평단 ' + pct1(j.stop.pctAvg) + ' · ' + stopNote + '</small></div>' +
+          '<div><span>익절선</span><b class="num">' + price(j.take.v, cur) + '</b><small class="num">평단 ' + pct1(j.take.pctAvg) + ' · ' + takeNote + '</small></div>' +
+        '</div>' +
+        '<div class="pn-tech"><span>기술 등급</span><em class="vchip sm ' + d.tone + '">' + d.verdict + '</em><span class="num">종합 점수 ' + (d.score > 0 ? '+' : '') + d.score + '</span>' +
+          (d.market && d.market.risk ? '<span class="pn-warn">시장 급락 중 · ' + mktText(d.market) + '</span>' : '') +
+          (t ? '<span class="muted">차트 손절가 ' + price(t.short.stop.v, cur) + '에서 팔면 평단 대비 ' + pct1((t.short.stop.v / j.avg - 1) * 100) + '</span>' : '') + '</div>' +
+        (inside ? '<div class="checks"><div class="checks-hd"><b>추가 매수 조건</b><span>' + j.conds.filter(function (c) { return c.ok; }).length + ' / ' + j.conds.length + ' 충족</span></div>' +
+          j.conds.map(function (c) { return '<div class="ck ' + (c.ok ? 'on' : 'off') + '"><i data-lucide="' + (c.ok ? 'check' : 'x') + '"></i><span>' + condText[c.key] + '</span></div>'; }).join('') + '</div>' : '') +
+        posCtl() +
+        '<p class="sum-note">ATR(14) ' + price(j.atr, cur) + ' · 현재가의 ' + j.atrPct.toFixed(1) + '%. ATR은 지금 값이라 변동성이 달라지면 두 선도 움직입니다. 입력한 평단가로 계산한 참고 정보이며 투자 권유가 아닙니다.</p>';
+    }
+    $('#posn-sub').textContent = '평단가 기준' + (a ? ' · ' + basisText(st) : '');
+    if (html !== posShown){ el.innerHTML = html; posShown = html; }
+  }
+  /* 평단가 · 배수를 바꾼 직후 — 카드와 차트 선을 다시 그린다 */
+  function refreshPosition(){
+    posShown = null;
+    renderPosition(M.BY_CODE[state.code], analysis);
+    paintTargetLines();
+    icons();
+  }
+
   /* ---------------- 분석 패널 ---------------- */
   function renderAnalysis(){
     const st = M.BY_CODE[state.code], a = analysis;
@@ -831,7 +948,7 @@
     const hold = a.quality.level === 'low';
     $('#g-needle').setAttribute('transform', 'rotate(' + (hold ? 0 : a.score / 100 * 90).toFixed(1) + ' 132 128)');
     const gs = $('#g-score');
-    gs.textContent = hold ? '분석 신뢰도 낮음' : '기술적 점수 ' + (a.score > 0 ? '+' : '') + a.score;
+    gs.textContent = hold ? '분석 신뢰도 낮음' : '기술적 점수 ' + (a.score > 0 ? '+' : '') + a.score + (a.capped ? ' · 종목만 +' + a.ownScore : '');
     gs.style.color = hold ? '#B54708' : a.tone === 'bull' ? '#F04438' : a.tone === 'bear' ? '#3B82F6' : '#4E5968';
     const v = $('#verdict');
     v.textContent = hold ? '판단 보류' : a.verdict;
@@ -840,6 +957,7 @@
     $('#verdict-why').innerHTML = hold ? a.quality.notes[0].text + tip('quality')
       : '<span class="regime" data-r="' + a.regime + '">' + reg + (a.adx != null ? ' · ADX ' + a.adx.toFixed(0) : '') + '</span>' +
         a.rows.length + '개 지표 중 매수 ' + a.buy + ' · 매도 ' + a.sell + tip('score');
+    paintMarket(a);
     $('.gauge-card').classList.toggle('hold', hold);
     $('#cats').innerHTML = Object.keys(QT.Scoring.CATS).map(function (k) {
       const v = a.cats[k];
@@ -927,6 +1045,7 @@
         '<span class="vx">' + price(l.v, st.cur) + '</span><span class="pc ' + cls(l.d) + '">' + pct(l.d) + '</span></div>';
     }).join('');
 
+    renderPosition(st, a);
     ensureBacktest(st);
     renderSummary(st, a);
     renderTargets(st, a);
@@ -944,15 +1063,15 @@
   function ensureBacktest(st){
     const daily = M.daily(st.code);
     if (daily.length < 120) { bt = { key:null, sig:null, tgt:null, pending:false }; return; }
-    const d = new Date(daily[daily.length - 1].t);
-    const key = st.code + '|' + daily.length + '|' + d.getFullYear() + d.getMonth() + d.getDate();
+    const d = new Date(daily[daily.length - 1].t), mk = analysis && analysis.daily.market;
+    const key = st.code + '|' + daily.length + '|' + d.getFullYear() + d.getMonth() + d.getDate() + (mk && mk.risk ? '|' + mk.key : '');
     if (bt.key === key) return;
     bt = { key:key, sig:null, tgt:null, pending:true };
     setTimeout(function () {
       if (bt.key !== key) return;
       try {
         const bars0 = M.daily(st.code), ind0 = QT.Indicators.set(bars0);
-        bt.sig = QT.Backtest.signals(bars0, ind0, 10, { open:M.barOpen(st.code, '1D') });
+        bt.sig = QT.Backtest.signals(bars0, ind0, 10, { open:M.barOpen(st.code, '1D'), market:benchOf(st) });
         bt.tgt = QT.Backtest.targets(bars0, st);
       } catch (e) { console.error(e); }
       bt.pending = false;
@@ -973,8 +1092,10 @@
 
     const s1 = t && t.supports[0], base = t && t.short.base, stop = t && t.short.stop;
     let guide = '';
+    const mk = d.market && d.market.risk ? d.market : null;
     if (t){
-      if (d.score >= 18 && heat !== 'hot') guide = '상승 흐름을 따라가는 구간입니다. ' + (s1 ? '1차 지지선 <b>' + price(s1.v, st.cur) + '</b>을 지키는지 확인하고, ' : '') + '<b>' + price(stop.v, st.cur) + '</b> 아래로 내려가면 손절을 고려하세요.';
+      if (mk && d.score >= 18) guide = '종목 추세는 상승이지만 시장 전체가 급락 중입니다. 신규 매수는 지수가 진정되는지 확인한 뒤로 미루고, 보유 중이면 <b>' + price(stop.v, st.cur) + '</b> 아래로 내려가는지 확인하세요.';
+      else if (d.score >= 18 && heat !== 'hot') guide = '상승 흐름을 따라가는 구간입니다. ' + (s1 ? '1차 지지선 <b>' + price(s1.v, st.cur) + '</b>을 지키는지 확인하고, ' : '') + '<b>' + price(stop.v, st.cur) + '</b> 아래로 내려가면 손절을 고려하세요.';
       else if (d.score >= 18) guide = '추세는 좋지만 단기 과열입니다. 추격 매수보다 ' + (s1 ? '<b>' + price(s1.v, st.cur) + '</b> 부근까지 ' : '') + '눌림을 기다리는 편이 유리합니다.';
       else if (d.score <= -18) guide = '하락 흐름입니다. 반등이 나와도 <b>' + price(base.v, st.cur) + '</b> 부근은 저항이 될 수 있어, 신규 매수는 추세 전환을 확인한 뒤가 안전합니다.';
       else guide = '방향이 정해지지 않았습니다. <b>' + price(base.v, st.cur) + '</b> 위로 올라서면 상승, ' + (s1 ? '<b>' + price(s1.v, st.cur) + '</b> 아래로 내려가면 하락 신호로 보고 대응하세요.' : '지지선 이탈 시 하락 신호로 보고 대응하세요.');
@@ -996,6 +1117,9 @@
     const qlHtml = ql.notes.length ? '<div class="ql ' + ql.level + '"><b>분석 신뢰도 ' + (hold ? '낮음' : '보통') + tip('quality') + '</b><ul>' +
       ql.notes.map(function (x) { return '<li>' + x.text + '</li>'; }).join('') + '</ul></div>' : '';
 
+    const mkHtml = mk ? '<div class="mkw"><b>시장 급락 중' + tip('market') + '</b>' + mktText(mk) + ' <span class="muted">(' + mktDay(mk) + ')</span>. ' +
+      (d.capped ? '종목 자체 점수는 ' + d.ownVerdict + '(+' + d.ownScore + ')이지만 시장 급락 중에는 강력 매수를 내지 않아 <b>' + d.verdict + '</b>로 표시합니다. ' : '') +
+      '이런 날 뒤에는 하루 변동폭이 평소보다 커집니다.</div>' : '';
     let rel;
     if (hold) rel = '';
     else if (bt.pending || !bt.sig) rel = '<div class="rel">이 종목의 과거 데이터로 신호 신뢰도를 계산하는 중…</div>';
@@ -1023,7 +1147,7 @@
       ? '<div class="sum-head"><span class="vchip neut">판단 보류</span><p>이 종목은 지표를 계산한 데이터를 믿기 어려워 투자 의견 · 목표가를 내지 않습니다.</p></div>' + qlHtml +
         (M.isReal(st.code) ? '' : '<p class="sum-note">토스증권을 연결하면 실제 일봉을 받아 분석합니다. 아래 차트 · 지표 값은 가상의 경로로 계산한 것입니다.</p>')
       : '<div class="sum-head"><span class="vchip ' + d.tone + '">' + d.verdict + '</span><p>' + head + '</p></div>' +
-        (guide ? '<div class="guide"><i data-lucide="navigation"></i><p>' + guide + '</p></div>' : '') + qlHtml +
+        (guide ? '<div class="guide"><i data-lucide="navigation"></i><p>' + guide + '</p></div>' : '') + mkHtml + qlHtml +
         '<div class="checks"><div class="checks-hd"><b>체크리스트</b><span>' + ok + ' / ' + checks.length + ' 충족</span></div>' +
           checks.map(function (c) {
             return '<div class="ck ' + (c[0] ? 'on' : 'off') + '"><i data-lucide="' + (c[0] ? 'check' : 'x') + '"></i><span>' + c[1] + '</span>' + tip(c[2]) + '</div>';
@@ -1050,7 +1174,7 @@
     const rows = [['일봉', a.daily]];
     ['1W', '1M'].forEach(function (tf) {
       const b = M.series(st.code, tf);
-      if (b.length >= 15) rows.push([tf === '1W' ? '주봉' : '월봉', A.core(b, st.cur, { open:M.barOpen(st.code, tf) })]);
+      if (b.length >= 15) rows.push([tf === '1W' ? '주봉' : '월봉', A.core(b, st.cur, { open:M.barOpen(st.code, tf), market:benchOf(st) })]);
     });
     const dirOf = function (x) { return x.score >= 18 ? 1 : x.score <= -18 ? -1 : 0; };
     const ups = rows.filter(function (r) { return dirOf(r[1]) > 0; }).length, downs = rows.filter(function (r) { return dirOf(r[1]) < 0; }).length;
@@ -1326,13 +1450,32 @@
   }
 
   /* ---------------- 로드 · 렌더 ---------------- */
+  let mktSig = '';
+  function mktSigOf(m){ return m ? m.key + '|' + m.day + '|' + m.d1.toFixed(1) + '|' + (m.d3 != null ? m.d3.toFixed(1) : '') + '|' + m.risk : ''; }
   function computeAnalysis(){
     ind = QT.Indicators.set(bars);
     const daily = M.daily(state.code);
     const wm = state.tf === '1W' || state.tf === '1M', analysisBars = wm ? bars : daily;
     analysis = A.run(analysisBars, M.BY_CODE[state.code], daily, {
-      open:M.barOpen(state.code, wm ? state.tf : '1D'), dailyOpen:M.barOpen(state.code, '1D'), real:M.isReal(state.code)
+      open:M.barOpen(state.code, wm ? state.tf : '1D'), dailyOpen:M.barOpen(state.code, '1D'), real:M.isReal(state.code),
+      market:benchOf(M.BY_CODE[state.code])
     });
+    mktSig = mktSigOf(analysis.market);
+  }
+  /* 지수는 30초마다 갱신된다. 평소에는 게이지 아래 지수 등락만 고쳐 쓰고,
+     급락에 들어가거나 벗어날 때(등급이 달라짐) · 급락 중에 수치가 바뀔 때(경고 문구에 쓰임)는 분석을 다시 계산한다 */
+  function refreshMarket(){
+    if (!analysis || !M.hasData(state.code) || M.needsDaily(state.code)) return;
+    const was = analysis.market, mk = benchOf(M.BY_CODE[state.code]), last = bars[bars.length - 1];
+    const now = mk && last ? QT.Scoring.marketAt(mk, QT.Scoring.dayOf(last.t), true) : null;
+    if (mktSigOf(now) === mktSig) return;
+    if (was && now && !was.risk && !now.risk){
+      analysis.market = analysis.daily.market = now; mktSig = mktSigOf(now);
+      paintMarket(analysis);
+      return;
+    }
+    computeAnalysis();
+    renderAnalysis();
   }
   function showNoData(on){
     $('#no-data').hidden = !on;
@@ -1371,6 +1514,7 @@
       $('#q-asof').textContent = '';
       ['#s-open','#s-high','#s-low','#s-vol','#s-52'].forEach(function (id) { $(id).textContent = '—'; });
       analysis = null; paintTargetLines();
+      renderPosition(st, null);
       $('#targets').innerHTML = $('#reasons').innerHTML = '<div class="empty">시세 데이터가 없어 목표주가를 계산할 수 없습니다.</div>';
       $('#summary').innerHTML = $('#events').innerHTML = $('#mtf').innerHTML = '<div class="empty">시세 데이터가 없어 분석할 수 없습니다.</div>';
       markKey = null; if (chart.ready) chart.series.candle.setMarkers([]);
@@ -1617,6 +1761,45 @@
     if (row) select(row.dataset.code);
   });
   $('#news-refresh').addEventListener('click', function () { if (NEWS) NEWS.refresh(true); });
+  $('#posn').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const avg = numIn($('#posn-avg').value), qty = numIn($('#posn-qty').value);
+    if (!avg){ $('#posn-form').classList.add('err'); $('#posn-avg').focus(); return; }
+    pos.items[state.code] = qty ? { avg:avg, qty:qty } : { avg:avg };
+    savePos(); posEdit = null; refreshPosition();
+  });
+  $('#posn').addEventListener('click', function (e) {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const act = b.dataset.act;
+    if (act === 'edit') posEdit = state.code;
+    else if (act === 'cancel') posEdit = null;
+    else if (act === 'del'){ delete pos.items[state.code]; savePos(); posEdit = null; }
+    else {
+      const k = act.slice(0, -1);                     // stop- · stop+ · take- · take+
+      pos.rule[k] = PN.mult(pos.rule[k] + (act.slice(-1) === '+' ? 1 : -1) * PN.RULE.step, pos.rule[k]);
+      savePos();
+    }
+    refreshPosition();
+    if (act === 'edit'){ const i = $('#posn-avg'); if (i){ i.focus(); i.select(); } }
+  });
+  /* 잔고 가져오기 — 여러 종목의 평단가를 한 번에 (importer.js). 가져온 값은 손으로 넣은 것과 같은 곳에 저장한다 */
+  $('#posn-import').addEventListener('click', function () { if (QT.Importer) QT.Importer.open(); });
+  if (QT.Importer) QT.Importer.init({
+    get:function (code) { return pos.items[code] || null; },
+    count:function () { return Object.keys(pos.items).length; },
+    /** @param list [{code, avg, qty}]  @param opt { watch: 관심종목에도 추가, replace: 목록에 없는 기존 평단가 삭제 } */
+    apply:function (list, opt) {
+      const keep = {};
+      list.forEach(function (x) { pos.items[x.code] = x.qty ? { avg:x.avg, qty:x.qty } : { avg:x.avg }; keep[x.code] = true; });
+      let removed = 0, added = 0;
+      if (opt.replace) Object.keys(pos.items).forEach(function (c) { if (!keep[c]){ delete pos.items[c]; removed++; } });
+      savePos();
+      if (opt.watch) list.forEach(function (x) { if (!inWL(x.code)){ state.watchlist.push(x.code); added++; } });
+      if (added){ saveWL(); renderList(); subscribeAll(); syncStar(); }
+      posEdit = null; refreshPosition();
+      toast(list.length + '종목의 평단가를 저장했습니다' + (removed ? ' · ' + removed + '종목 삭제' : '') + (added ? ' · 관심종목 ' + added + '개 추가' : ''));
+    }
+  });
   $('#combo-strip').addEventListener('click', function () {
     const b = $('#side-tabs button[data-panel="value"]');
     if (b) b.click();
@@ -1667,7 +1850,7 @@
   });
   document.addEventListener('keydown', function (e) {
     if (state.view !== 'stock' || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || $('#modal').classList.contains('show') || (QT.Home && QT.Home.popOpen)) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || document.body.classList.contains('modal-lock') || (QT.Home && QT.Home.popOpen)) return;
     const fs = isFs();
     if (e.key === 'Escape' && fs){ setFs(false); return; }
     if (e.key === 'f' || e.key === 'F'){ e.preventDefault(); setFs(!fs); return; }
@@ -1819,6 +2002,10 @@
     /* 시장 스냅샷(예상치 · 이번 주 확정 일정)이 도착하면 매크로 탭 일정도 다시 그린다 */
     if (QT.Markets) QT.Markets.on(function (kind) {
       if (kind === 'snapshot' && state.panel === 'macro'){ renderMacroList(); renderEarnings(); }
+      if (kind === 'snapshot' || kind === 'live'){
+        refreshMarket();
+        if (QT.Screener && QT.Screener.cfg.on) QT.Screener.tick($('#wl'), state.tab, state.mkt, state.watchlist);
+      }
     });
     $('#wl').innerHTML = '<div class="loading">종목 데이터를 불러오는 중…</div>';
     M.init().then(function (meta) {

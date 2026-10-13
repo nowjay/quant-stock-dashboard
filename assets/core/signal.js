@@ -9,6 +9,8 @@
    재무 점수 (0~100) — fundamentals.js (PER · PBR 업종 대비 · ROE · 영업이익 YoY − 재무 위험 감점)
    종합 = 0.5 × 기술 + 0.5 × 재무
      80↑ 강력 매수 · 65~79 매수 · 45~64 중립 · 30~44 매도 · 30 미만 강력 매도
+   시장 급락(소속 지수 당일 −2% 이하 · 3거래일 −3% 이하 — scoring.js marketAt) 중에는 기술 · 종합 점수를 각각 79(매수)로 제한한다.
+     강력 매수만 거두는 것이라 79점 이하인 점수는 달라지지 않는다. 재무 점수는 매수 시점이 아니라 기업 가치를 보는 값이라 그대로 둔다
    ============================================================= */
 window.QT = window.QT || {};
 (function (QT) {
@@ -17,6 +19,7 @@ window.QT = window.QT || {};
   function fin(v){ return v != null && isFinite(v); }
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
+  const MARKET_CAP = 79;                               // 시장 급락 때의 상한 — 강력 매수(80) 바로 아래
   const GRADES = [
     { min:80, key:'sbuy',  label:'강력 매수' },
     { min:65, key:'buy',   label:'매수' },
@@ -39,8 +42,12 @@ window.QT = window.QT || {};
     return null;
   }
 
-  /** 일봉 · 지표 세트로 기술 점수 계산 */
-  function tech(bars, ind){
+  /**
+   * 일봉 · 지표 세트로 기술 점수 계산
+   * @param mkt  소속 지수의 상태 (Scoring.marketAt 결과 · Analysis.core 의 market). 급락이면 점수를 MARKET_CAP 으로 제한
+   * @returns {score, raw, marketCut, market, parts, …}  raw = 항목 합계, marketCut = 시장 급락으로 깎인 점수
+   */
+  function tech(bars, ind, mkt){
     const n = bars.length;
     if (n < 60 || !ind) return null;
     const i = n - 1, p = bars[i].c, tags = [];
@@ -111,15 +118,24 @@ window.QT = window.QT || {};
       { key:'macd', name:'MACD 시그널', pts:macdPts, max:25, note:macdNote },
       { key:'pivot', name:'피봇 저항선', pts:pivPts, max:25, note:pivNote }
     ];
-    return { score:parts.reduce(function (a, x) { return a + x.pts; }, 0), parts:parts, pivot:piv,
+    const raw = parts.reduce(function (a, x) { return a + x.pts; }, 0), risk = !!(mkt && mkt.risk);
+    if (risk) tag('#시장급락', 10, 'bad');
+    const score = risk ? Math.min(raw, MARKET_CAP) : raw;
+    return { score:score, raw:raw, marketCut:raw - score, market:mkt || null, parts:parts, pivot:piv,
              tags:tags.sort(function (a, b) { return b.w - a.w; }), rsi:r };
   }
 
-  /** 기술 · 재무 결합 */
+  /**
+   * 기술 · 재무 결합 — 시장 급락 중에는 종합도 MARKET_CAP 을 넘지 않는다.
+   * 종합은 기술 항목 합계(raw)로 계산한 뒤에 제한한다 — 제한된 기술 점수(79)로 합치면 매수 이하 종합 등급까지 따라 내려간다
+   * @returns own = 시장을 반영하기 전 종합, capped = 기술 또는 종합이 시장 급락으로 제한됨
+   */
   function combine(t, f){
-    const ts = t ? t.score : null, fs = f ? f.score : null;
-    const total = fin(ts) && fin(fs) ? Math.round(0.5 * ts + 0.5 * fs) : null;
-    return { total:total, tech:ts, fund:fs, grade:grade(total), techGrade:grade(ts), fundGrade:grade(fs) };
+    const ts = t ? t.score : null, fs = f ? f.score : null, both = fin(ts) && fin(fs);
+    const own = both ? Math.round(0.5 * t.raw + 0.5 * fs) : null;
+    const total = both && t.market && t.market.risk ? Math.min(own, MARKET_CAP) : own;
+    return { total:total, own:own, tech:ts, techRaw:t ? t.raw : null, fund:fs, grade:grade(total), techGrade:grade(ts), fundGrade:grade(fs),
+             market:t ? t.market : null, capped:!!t && (t.marketCut > 0 || total !== own) };
   }
 
   /* ---------------- 스크리너 평가 (종목별 캐시) ---------------- */
@@ -129,7 +145,10 @@ window.QT = window.QT || {};
     if (!st) return null;
     const q = M.lightQuote(code), price = q && q.price;
     const real = M.isReal(code), open = real && M.barOpen(code, '1D');
-    let key = code + '|' + (price || 0) + '|' + real + '|' + open + '|' + (QT.Fund ? QT.Fund.meta().updated : '');
+    /* 지수는 30초마다 움직이지만 점수를 바꾸는 것은 급락 여부뿐 — 그 여부가 바뀔 때만 다시 계산한다 */
+    const mk = QT.Markets && QT.Markets.benchmark ? QT.Markets.benchmark(st) : null;
+    const ms = mk ? QT.Scoring.marketAt(mk, null, true) : null;
+    let key = code + '|' + (price || 0) + '|' + real + '|' + open + '|' + (QT.Fund ? QT.Fund.meta().updated : '') + '|' + (ms && ms.risk ? ms.key : '');
     let d = null;
     if (real){
       d = M.daily(code);
@@ -143,8 +162,8 @@ window.QT = window.QT || {};
     const ql = real && d && d.length ? QT.Analysis.quality(d, { real:true }) : null;
     if (real && d && d.length >= 60 && ql.level !== 'low'){
       try {
-        const core = QT.Analysis.core(d, st.cur, { open:open });
-        t = tech(d, core.ind);
+        const core = QT.Analysis.core(d, st.cur, { open:open, market:mk });
+        t = tech(d, core.ind, core.market);
         const T = QT.Targets && QT.Targets.build(d, core, st);
         if (T && T.mid && T.mid.base) tgt = { v:T.mid.base.v, pct:T.mid.base.pct };
       } catch (e) { console.warn('[QT] 스크리너 기술 분석 실패', code, e); }
@@ -156,5 +175,5 @@ window.QT = window.QT || {};
   }
   function invalidate(code){ if (code) delete cache[code]; else Object.keys(cache).forEach(function (k) { delete cache[k]; }); }
 
-  QT.Signal = { tech:tech, combine:combine, grade:grade, GRADES:GRADES, evaluate:evaluate, invalidate:invalidate };
+  QT.Signal = { tech:tech, combine:combine, grade:grade, GRADES:GRADES, MARKET_CAP:MARKET_CAP, evaluate:evaluate, invalidate:invalidate };
 })(window.QT);
