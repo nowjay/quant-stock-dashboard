@@ -208,6 +208,24 @@ window.QT = window.QT || {};
     }
     return out;
   }
+  /* ---------- 종목이 속한 종합 지수 ----------
+     종합 의견 · 매수 신호의 '시장 급락' 판단 기준 (scoring.js marketAt). 종목의 시장 구분(symbols.json 의 m)으로 고른다.
+     ETF 는 뺀다 — 인버스 · 채권 · 해외 지수형처럼 상장된 시장과 반대로 · 따로 움직이는 상품이 많다 */
+  const BENCH = { KOSPI:'KOSPI', KOSDAQ:'KOSDAQ', NASDAQ100:'IXIC', 'S&P500':'SPX', US:'IXIC' };
+  const benchMemo = {};
+  /** @returns {key, name, h:[[yyyymmdd, 종가]], r, day, live} — 지수 일봉이 아직 없으면 null. 지수 값이 그대로면 같은 객체를 돌려준다 */
+  function benchmark(st){
+    const k = st && st.type !== 'etf' ? BENCH[st.market] : null;
+    if (!k) return null;
+    const d = DEF[k], L = d.sym && LIVE[d.sym];
+    const sig = (SNAP ? SNAP.updated : '') + '|' + (L ? L.p + '|' + L.day : '');
+    const m = benchMemo[k];
+    if (m && m.sig === sig) return m.v;
+    const it = get(k);
+    const v = it && it.h && it.h.length >= 2 ? { key:k, name:it.n, h:it.h, r:it.r, day:it.day, live:it.live } : null;
+    benchMemo[k] = { sig:sig, v:v };
+    return v;
+  }
   function list(group){
     return ITEMS.filter(function (d) { return !group || d.g === group; })
       .map(function (d) { return get(d.k); }).filter(Boolean);
@@ -334,7 +352,7 @@ window.QT = window.QT || {};
 
   const api = {
     ITEMS:ITEMS, DEF:DEF, DESC:DESC,
-    init:init, on:on, get:get, list:list, fetchLong:fetchLong, session:session,
+    init:init, on:on, get:get, list:list, benchmark:benchmark, fetchLong:fetchLong, session:session,
     consensus:consensus, eps:eps, refresh:poll,
     get status(){ return status; },
     get snap(){ return SNAP; },

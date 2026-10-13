@@ -35,6 +35,11 @@ window.QT = window.QT || {};
     return (tags || []).slice(0, n || 6).map(function (t) { return '<span class="vtag ' + t.tone + '">' + t.text + '</span>'; }).join('');
   }
 
+  /* 코스닥 −4.8% · 3일 −7.7% — 시장 급락으로 점수를 제한했을 때 붙이는 근거 (scoring.js marketAt) */
+  function mkLine(m){ return m.name + ' ' + pct1(m.d1) + (m.d3 != null ? ' · 3일 ' + pct1(m.d3) : ''); }
+  /* 제한된 점수는 '항목 합계→제한 값' 으로 — 종합(기술 50 + 재무 50)은 항목 합계로 계산하므로 둘 다 보여야 셈이 맞는다 */
+  function techTxt(c){ return c.techRaw !== c.tech ? c.techRaw + '→' + c.tech : '' + c.tech; }
+
   /* ---------------- ⓪ 종합 매수 신호 ---------------- */
   function scaleBar(score){
     const zones = [[0, 30, 'ssell'], [30, 45, 'sell'], [45, 65, 'neut'], [65, 80, 'buy'], [80, 100, 'sbuy']];
@@ -65,9 +70,12 @@ window.QT = window.QT || {};
       '<div class="sg">' +
         '<div class="sg-top">' + head + '</div>' +
         scaleBar(shown) +
+        (c.capped ? '<p class="sg-mk">시장 급락 중(' + mkLine(c.market) + ')에는 강력 매수를 내지 않습니다 — ' +
+          [t.marketCut ? '기술 ' + techTxt(c) : '', c.total !== c.own ? '종합 ' + c.own + '→' + c.total : ''].filter(Boolean).join(' · ') + '점으로 제한했습니다.' + ctx.tip('market') + '</p>' : '') +
         '<div class="sg-duo">' +
           '<div class="sg-half"><div class="sg-h"><span>기술 점수</span>' + badge(c.techGrade, techPts, true) + '</div>' +
-            (t ? partRows(t.parts) : '<p class="muted sm">실제 일봉이 부족해 계산하지 않았습니다.</p>') + '</div>' +
+            (t ? partRows(t.parts, t.marketCut ? '<div class="pt pen"><span class="pt-n">시장 급락 상한</span><span></span><b class="num down">−' + t.marketCut + '</b><small class="pt-note">' + mkLine(t.market) + ' — 강력 매수를 내지 않습니다</small></div>' : '')
+               : '<p class="muted sm">실제 일봉이 부족해 계산하지 않았습니다.</p>') + '</div>' +
           '<div class="sg-half"><div class="sg-h"><span>재무 점수</span>' + badge(c.fundGrade, fundPts, true) + '</div>' +
             (fa ? partRows(fa.scoring.parts, fa.scoring.penalty ? '<div class="pt pen"><span class="pt-n">재무 위험 감점</span><span></span><b class="num down">−' + fa.scoring.penalty + '</b><small class="pt-note">' + fa.scoring.penaltyNote + '</small></div>' : '')
                : '<p class="muted sm">재무 데이터가 수집되지 않은 종목입니다' + (st.type === 'etf' ? ' (ETF)' : '') + '.</p>') + '</div>' +
@@ -87,11 +95,12 @@ window.QT = window.QT || {};
       const tp = t.parts;
       lines.push({ tone: t.score >= 65 ? 'good' : t.score >= 45 ? 'neut' : 'bad',
         html:'기술적으로는 ' + (tp[0].pts ? tp[0].note.split(' · ').slice(0, 2).join(', ') : '이동평균선이 모두 하락 배열') +
-          ', RSI ' + (fin(t.rsi) ? t.rsi.toFixed(0) : '—') + ', ' + tp[3].note + ' 상태로 기술 점수 <b>' + t.score + '점</b>입니다.' });
+          ', RSI ' + (fin(t.rsi) ? t.rsi.toFixed(0) : '—') + ', ' + tp[3].note + ' 상태로 기술 점수 <b>' + t.score + '점</b>입니다.' +
+          (t.marketCut ? ' 항목 합계는 ' + t.raw + '점이지만 시장 급락 중(' + mkLine(t.market) + ')이라 ' + t.score + '점으로 제한했습니다.' : '') });
     }
     const g = c.total != null ? c.grade : c.fundGrade;
     const verdict = c.total != null
-      ? '기술(' + c.tech + ')과 재무(' + c.fund + ')를 합친 종합 점수는 <b>' + c.total + '점 · ' + g.label + '</b>입니다.'
+      ? '기술(' + c.techRaw + ')과 재무(' + c.fund + ')를 합친 종합 점수는 <b>' + c.total + '점 · ' + g.label + '</b>입니다.' + (c.total !== c.own ? ' 합계는 ' + c.own + '점이지만 시장 급락 중에는 강력 매수를 내지 않아 ' + c.total + '점으로 제한했습니다.' : '')
       : '재무 점수만으로는 <b>' + fa.score + '점 · ' + g.label + '</b>입니다.';
     return '<div class="card-hd"><i data-lucide="sparkles"></i><h2>AI 가치분석 요약</h2><span class="sub">' + (fa.asOf ? String(fa.asOf).slice(0, 10) + ' 재무 수집' : '') + '</span></div>' +
       '<div class="vsum">' +
@@ -499,7 +508,7 @@ window.QT = window.QT || {};
   function techOf(code, a){
     if (!a || !a.daily || !M.isReal(code)) return null;
     if (a.quality && a.quality.level === 'low') return null;       // 거래정지 · 봉 부족 — 스크리너(signal.js)와 같은 기준
-    return S.tech(M.daily(code), a.daily.ind);
+    return S.tech(M.daily(code), a.daily.ind, a.daily.market);
   }
   function render(force){
     const el = $('#panel-value'), st = view.st, a = view.a;
@@ -559,7 +568,7 @@ window.QT = window.QT || {};
     el.hidden = !g;
     if (!g) return;
     el.innerHTML = '<span class="cs-l">종합 매수 신호</span>' + badge(g, c.total != null ? c.total : c.tech != null ? c.tech : c.fund, true) +
-      '<span class="cs-d">' + (c.total != null ? '기술 ' + c.tech + ' · 재무 ' + c.fund : c.tech != null ? '기술만 · 재무 데이터 없음' : M.isReal(st.code) ? '재무만 · 기술 분석 신뢰도 낮음' : '재무만 · 실제 일봉 없음') + '</span><i data-lucide="chevron-right"></i>';
+      '<span class="cs-d">' + (c.capped ? '시장 급락 · ' : '') + (c.total != null ? '기술 ' + techTxt(c) + ' · 재무 ' + c.fund : c.tech != null ? '기술만 · 재무 데이터 없음' : M.isReal(st.code) ? '재무만 · 기술 분석 신뢰도 낮음' : '재무만 · 실제 일봉 없음') + '</span><i data-lucide="chevron-right"></i>';
   }
 
   function init(c){

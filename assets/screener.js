@@ -5,6 +5,7 @@
      · 기술 · 종합 기준은 실제 일봉이 있는 종목만, 재무 · 종합 기준은 재무 데이터가 있는 종목만 평가
      · 국내 종목은 공공데이터(금융위원회) 일봉 — 시가총액 상위 종목은 스크리너를 켤 때 일봉을 받아 평가
      · 종목별 평가는 signal.js 에 캐시되고, 가격이 바뀐 종목만 다시 계산합니다
+     · 소속 지수가 급락 중이면 기술 · 종합 기준의 강력 매수를 매수로 낮춥니다 (signal.js) — 낮춘 종목 수를 목록 위에 표시
    ============================================================= */
 window.QT = window.QT || {};
 (function (QT) {
@@ -42,6 +43,11 @@ window.QT = window.QT || {};
       if (mkt === 'ETF') return s.type === 'etf';
       return s.market === mkt;
     });
+  }
+  /* 소속 지수의 지금 상태 — 종목 평가는 캐시되므로 목록 위에 쓰는 지수 등락은 여기서 새로 읽는다 */
+  function marketNow(st){
+    const mk = QT.Markets && QT.Markets.benchmark ? QT.Markets.benchmark(st) : null;
+    return mk ? QT.Scoring.marketAt(mk, null, true) : null;
   }
   function scoreOf(ev){
     if (!ev) return null;
@@ -87,7 +93,7 @@ window.QT = window.QT || {};
   function cardHtml(ev, sc, cur){
     const g = S.grade(sc), up = upsideOf(ev), tags = tagsOf(ev);
     const sub = [];
-    if (ev.tech) sub.push('기술 ' + ev.tech.score);
+    if (ev.tech) sub.push('기술 ' + (ev.tech.marketCut ? ev.tech.raw + '→' : '') + ev.tech.score);      // 시장 급락으로 제한된 점수는 '합계→제한 값'
     if (ev.fund) sub.push('재무 ' + ev.fund.score);
     return '<div class="scr-card' + (ev.code === cur ? ' on' : '') + '" data-code="' + ev.code + '" role="button" tabindex="0">' +
       '<div class="sc-top"><div class="sc-nm"><b>' + ev.st.name + '</b><span class="code">' + ev.code + '</span></div>' + QT.Value.badge(g, sc, true) + '</div>' +
@@ -105,10 +111,18 @@ window.QT = window.QT || {};
     const hits = valid.filter(function (x) { return x.sc >= min; }).sort(function (a, b) { return b.sc - a.sc || (b.ev.combo.total || 0) - (a.ev.combo.total || 0); });
     const skipped = total - valid.length;
     const why = cfg.basis === 'tech' ? '실제 일봉이 없는' : cfg.basis === 'fund' ? '재무 데이터가 없는' : '일봉 또는 재무 데이터가 없는';
+    /* 시장 급락으로 강력 매수에서 내려온 종목 — 강력 매수 목록이 비거나 줄어든 이유 */
+    const idx = {};
+    const cut = cfg.basis === 'fund' ? 0 : evs.filter(function (ev) {
+      const hit = cfg.basis === 'tech' ? !!ev.tech && ev.tech.marketCut > 0 : ev.combo.own >= 80 && ev.combo.total < 80;
+      if (hit){ const m = marketNow(ev.st) || ev.tech.market; idx[m.key] = m.name + ' ' + pct1(m.d1); }
+      return hit;
+    }).length;
     const head = (fetching ? '<div class="scr-skip">공공데이터 일봉 ' + fetching + '종목을 받는 중 — 받는 대로 다시 평가합니다.</div>' : '') +
       '<div class="scr-head"><b>' + BASIS[cfg.basis] + ' 기준 · ' + (cfg.grade === 'sbuy' ? '강력 매수' : '매수 이상') + '</b>' +
       '<span><em class="num">' + hits.length + '</em>종목 / 분석 ' + valid.length + '종목</span></div>' +
-      (skipped ? '<div class="scr-skip">' + why + ' ' + skipped + '종목은 제외했습니다.</div>' : '');
+      (skipped ? '<div class="scr-skip">' + why + ' ' + skipped + '종목은 제외했습니다.</div>' : '') +
+      (cut ? '<div class="scr-skip mk">시장 급락 중(' + Object.keys(idx).map(function (k) { return idx[k]; }).join(' · ') + ') — ' + cut + '종목의 강력 매수를 매수로 낮췄습니다.</div>' : '');
     const cur = ctx.current();
     const body = hits.length ? hits.map(function (x) { return cardHtml(x.ev, x.sc, cur); }).join('')
       : '<div class="empty">조건에 맞는 종목이 없습니다.<br>' + (cfg.grade === 'sbuy' ? '<b>매수 이상 전체</b>로 넓히거나 ' : '') + '분석 기준을 바꿔 보세요.' +

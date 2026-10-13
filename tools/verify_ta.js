@@ -10,10 +10,14 @@
       · 지표: 교과서 RSI 예제 + 정의대로 다시 짠 참조 구현과 전 구간 비교 (SMA · EMA · RSI · MACD · 볼린저 · ATR · ADX)
       · 피봇 기준 봉(끝난 봉 / 진행 중인 봉) · 달력 주 · 월 피봇 · 봉 마감 시각 · 진행 중인 봉의 거래량 제외
       · 분석 신뢰도(데이터 품질) 판정 · 도달확률 · 신호 신뢰도 판정(겹치지 않는 표본 · 유의성)
+      · 시장(종합 지수) 반영 — 급락 판단 · 점수 상한 · 과거 봉에 미래 지수를 쓰지 않는지
+      · 평단가 기준 포지션 판단 — 손절선 · 익절선 · 추가 매수 조건
    ② 신뢰도 리포트 — '그 시점까지의 데이터만' 써서 과거 각 시점에 같은 계산을 적용
       · 종합 점수 등급별 10거래일 뒤 수익률 (같은 날 종목 평균 대비)
       · 목표가 · 손절가의 표시 도달확률 vs 실제 도달률 (보정 상태)
       · 종목별 '신호 신뢰도' 판정 분포
+      · 시장 급락 상태별 강력 매수 다음 거래일 성적 (점수 상한의 근거 — assets/data/markets.json 의 지수 일봉 약 1년)
+      · 평단가 기준 손절 2 ATR · 익절 3 ATR — 아무 날 종가에 샀을 때 어느 선에 먼저 닿았나
    데이터: assets/data/krx/d (공공데이터 일봉, 있으면) + assets/data/history.json (번들 일봉)
    ============================================================= */
 'use strict';
@@ -25,7 +29,7 @@ const N = +(args[args.indexOf('--n') + 1]) > 0 && args.indexOf('--n') >= 0 ? +ar
 const win = { QT:{} };
 const ctx = vm.createContext({ window:win, console:console, Intl:Intl, Date:Date, Math:Math, isFinite:isFinite,
   fetch:function () { return Promise.reject(new Error('fetch 없음')); } });
-['market-data', 'indicators', 'scoring', 'patterns', 'targets', 'analysis', 'backtest', 'signal'].forEach(function (m) {
+['market-data', 'indicators', 'scoring', 'position', 'patterns', 'targets', 'analysis', 'backtest', 'signal'].forEach(function (m) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'assets/core', m + '.js'), 'utf8'), ctx, { filename:m + '.js' });
 });
 const QT = win.QT, I = QT.Indicators, M = QT.Market;
@@ -185,6 +189,99 @@ check('신호 신뢰도 — 겹치지 않는 표본 · 유의성', function () {
   const s = QT.Backtest.signals(sample, ind, 10);
   assert.ok(s.rel && s.same.nEff <= s.same.n && s.base.nEff > 0);
 });
+/* 표본과 날짜가 같은 가상의 지수 — 하루 +0.1% 씩 오르다가 마지막 drops.length 일은 drops(%) 만큼 움직인다 */
+function fakeIndex(drops, upto){
+  const m = upto == null ? sample.length : upto, st = m - drops.length;
+  let v = 1000;
+  return { key:'KOSPI', name:'코스피', h:sample.slice(0, m).map(function (b, i) { v *= 1 + (i >= st ? drops[i - st] : 0.1) / 100; return [QT.Scoring.dayOf(b.t), v]; }) };
+}
+check('시장 반영 — 급락 판단 (당일 −2% · 3거래일 −3%) · 그 날짜까지의 지수만 사용', function () {
+  const S = QT.Scoring, n = sample.length, dOf = function (i) { return S.dayOf(sample[i].t); };
+  const calm = S.marketAt(fakeIndex([]), dOf(n - 1));
+  assert.strictEqual(calm.risk, false); assert.ok(Math.abs(calm.d1 - 0.1) < 1e-9); assert.strictEqual(calm.day, dOf(n - 1));
+  const crash = fakeIndex([-2.5]);
+  assert.deepStrictEqual([S.marketAt(crash, dOf(n - 1)).risk, S.marketAt(crash, dOf(n - 1)).by], [true, 'day']);
+  assert.strictEqual(S.marketAt(crash, dOf(n - 2)).risk, false);                             // 전날에는 아직 모르는 일
+  assert.strictEqual(S.marketAt(crash, dOf(n - 2), true).risk, true);                        // '지금' 은 가장 최근 지수
+  const slide = S.marketAt(fakeIndex([-1.2, -1.2, -1.2]), dOf(n - 1));
+  assert.deepStrictEqual([slide.risk, slide.by], [true, 'd3']); assert.ok(slide.d1 > S.MARKET.day && slide.d3 <= S.MARKET.d3);
+  assert.strictEqual(S.marketAt(fakeIndex([-1.2, -1.2]), dOf(n - 1)).risk, false);           // 이틀 −2.4% 는 기준 미달
+  assert.strictEqual(S.marketAt(fakeIndex([], n - 30), dOf(n - 1)), null);                   // 지수 일봉이 한 달 비면 판단하지 않는다
+  assert.strictEqual(S.marketAt(fakeIndex([], n - 30), dOf(n - 1), true), null);
+  assert.strictEqual(S.marketAt({ key:'KOSPI', name:'코스피', h:fakeIndex([]).h.slice(100) }, dOf(50)), null);
+  assert.strictEqual(S.marketAt(null, dOf(n - 1)), null);
+  const live = Object.assign(fakeIndex([-0.5]), { r:-2.3, day:dOf(n - 1) });                 // 실시간 등락률이 일봉 계산보다 우선
+  assert.strictEqual(S.marketAt(live, dOf(n - 1), true).d1, -2.3); assert.ok(Math.abs(S.marketAt(live, dOf(n - 1)).d1 + 0.5) < 1e-9);
+});
+check('시장 반영 — 급락이면 종합 점수 상한 +54 · 스크리너 기술 · 종합 79 (매수 이하는 그대로)', function () {
+  const S = QT.Scoring, n = sample.length;
+  let hi = -1, lo = -1;
+  for (let i = n - 2; i >= 200 && (hi < 0 || lo < 0); i--){ const v = S.at(sample, ind, i).score; if (hi < 0 && v >= 55) hi = i; if (lo < 0 && v < 55) lo = i; }
+  assert.ok(hi > 0 && lo > 0, '표본에 강력 매수인 날과 아닌 날이 모두 있어야 합니다');
+  const own = S.at(sample, ind, hi), crash = fakeIndex([-3], hi + 1), calm = fakeIndex([], hi + 1);
+  const cut = S.at(sample, ind, hi, { market:crash });
+  assert.deepStrictEqual([cut.score, cut.own, cut.capped, S.verdictOf(cut.score)], [S.MARKET.cap, own.score, true, '매수']);
+  assert.strictEqual(own.capped, false); assert.strictEqual(own.market, null);
+  assert.deepStrictEqual([S.at(sample, ind, hi, { market:calm }).score, S.at(sample, ind, hi, { market:calm }).capped], [own.score, false]);
+  const low = S.at(sample, ind, lo, { market:fakeIndex([-3], lo + 1) });
+  assert.deepStrictEqual([low.score, low.capped, low.market.risk], [S.at(sample, ind, lo).score, false, true]);
+  /* 다음 날의 급락: 과거 봉은 모르고, '지금'(now)으로 보는 마지막 봉만 가장 최근 지수를 쓴다 */
+  const late = fakeIndex([-3], hi + 2), upto = sample.slice(0, hi + 1);
+  assert.strictEqual(S.at(upto, ind, hi, { market:late }).capped, false);
+  assert.strictEqual(S.at(upto, ind, hi, { market:late, now:true }).capped, true);
+  assert.strictEqual(S.at(sample, ind, hi, { market:late, now:true }).capped, false);        // 마지막 봉이 아니면 그 날짜 기준
+  const a = QT.Analysis.core(sample.slice(0, hi + 1), 'KRW', { market:crash });
+  assert.deepStrictEqual([a.score, a.verdict, a.ownScore, a.ownVerdict, a.capped, a.market.risk], [S.MARKET.cap, '매수', own.score, '강력 매수', true, true]);
+  /* 스크리너 */
+  const G = QT.Signal;
+  let ti = -1;
+  for (let i = n - 1; i >= 200 && ti < 0; i--){ const t = G.tech(sample.slice(0, i + 1), ind); if (t && t.score >= 80) ti = i; }
+  assert.ok(ti > 0, '표본에 기술 점수 80 이상인 날이 있어야 합니다');
+  const bars = sample.slice(0, ti + 1), t0 = G.tech(bars, ind), t1 = G.tech(bars, ind, { key:'KOSPI', name:'코스피', d1:-3, d3:-4, risk:true });
+  assert.deepStrictEqual([t1.score, t1.raw, t1.marketCut, G.grade(t1.score).key], [G.MARKET_CAP, t0.score, t0.score - G.MARKET_CAP, 'buy']);
+  assert.deepStrictEqual([t0.marketCut, t0.raw, G.tech(bars, ind, { risk:false }).score], [0, t0.score, t0.score]);
+  assert.ok(t1.tags.some(function (x) { return x.text === '#시장급락' && x.tone === 'bad'; }) && !t0.tags.some(function (x) { return x.text === '#시장급락'; }));
+  const c1 = G.combine(t1, { score:100 }), c0 = G.combine(t0, { score:100 });
+  assert.deepStrictEqual([c1.total, c1.own, c1.capped, c1.grade.key], [G.MARKET_CAP, c0.total, true, 'buy']);
+  assert.deepStrictEqual([c0.capped, c0.own, G.combine(null, { score:90 }).capped, G.combine(t1, null).capped], [false, c0.total, false, true]);
+  /* 종합이 매수 이하이면 기술 점수의 상한이 종합을 끌어내리지 않는다 (종합은 항목 합계로 계산) */
+  const m1 = G.combine(t1, { score:40 }), m0 = G.combine(t0, { score:40 });
+  assert.ok(m0.total < 80); assert.deepStrictEqual([m1.total, m1.own, m1.techRaw, m1.tech, m1.capped], [m0.total, m0.total, t0.score, G.MARKET_CAP, true]);
+});
+check('시장 반영 — 신호 신뢰도 백테스트도 같은 등급 기준', function () {
+  const always = fakeIndex(sample.map(function () { return -2.5; }));                       // 매일 급락 → 강력 매수인 날이 없어야 한다
+  const s = QT.Backtest.signals(sample, ind, 10, { market:always }), plain = QT.Backtest.signals(sample, ind, 10);
+  assert.strictEqual(s.byClass['2'].n, 0); assert.ok(s.cls <= 1);
+  assert.strictEqual(s.byClass['1'].n, plain.byClass['1'].n + plain.byClass['2'].n);
+  assert.deepStrictEqual(QT.Backtest.signals(sample, ind, 10, { market:fakeIndex([]) }).byClass['2'].n, plain.byClass['2'].n);
+});
+check('평단가 기준 포지션 판단 — 손절선 · 익절선 · 추가 매수 조건', function () {
+  const P = QT.Position, calm = { risk:false }, crash = { risk:true };
+  const J = function (price, o) { return P.judge(Object.assign({ avg:10000, price:price, atr:500, score:40, market:calm }, o)); };
+  const j = J(10000);
+  assert.deepStrictEqual([j.stop.v, j.take.v, j.rule.stop, j.rule.take, j.pnl, j.pnlAtr], [9000, 11500, 2, 3, 0, 0]);       // 평단 − 2 ATR · + 3 ATR
+  assert.ok(Math.abs(j.stop.pctAvg + 10) < 1e-9 && Math.abs(j.take.pctAvg - 15) < 1e-9 && Math.abs(j.avgPos - 0.4) < 1e-9 && Math.abs(j.pos - 0.4) < 1e-9);
+  /* 선에 닿으면(같아도) 매도 */
+  assert.deepStrictEqual([J(9000).action, J(9001).action === 'cut', J(8000).action, J(11500).action, J(11499).action === 'take', J(15000).action], ['cut', false, 'cut', 'take', false, 'take']);
+  assert.deepStrictEqual([J(9000).label, J(11500).label, J(10000).label, J(11000).label], ['매도 · 손절', '매도 · 익절', '추가 매수 가능', '보유']);
+  /* 추가 매수: 추세(매수 이상) · 시장 급락 아님 · 남은 폭(익절 ≥ 손절) 을 모두 만족할 때만 */
+  const ok = function (x) { return Array.from(x.conds, function (c) { return c.ok; }); };       // vm 안의 배열은 프로토타입이 달라 옮겨서 비교
+  assert.deepStrictEqual([J(10250).action, ok(J(10250))], ['add', [true, true, true]]);                                     // 익절까지 1250 = 손절까지 1250
+  assert.deepStrictEqual([J(10251).action, ok(J(10251))], ['hold', [true, true, false]]);
+  assert.deepStrictEqual([J(9500, { score:17 }).action, ok(J(9500, { score:17 })), J(9500, { score:18 }).action], ['hold', [false, true, true], 'add']);
+  assert.deepStrictEqual([J(9500, { market:crash }).action, ok(J(9500, { market:crash })), J(9500, { market:null }).action], ['hold', [true, false, true], 'add']);
+  assert.strictEqual(J(8900, { score:90 }).action, 'cut');                                                                  // 등급이 좋아도 손절선 아래면 손절
+  /* 선까지 0.5 ATR 이내면 근접 */
+  assert.deepStrictEqual([J(9250).near, J(9251).near, J(11250).near, J(11249).near, J(9000).near], ['stop', null, 'take', null, null]);
+  /* 배수 조정 (0.5 단위 · 0.5~10) · 수량 */
+  const w = J(10000, { rule:{ stop:1.5, take:6 }, qty:10 });
+  assert.deepStrictEqual([w.stop.v, w.take.v, w.amount, J(10700, { qty:10 }).amount, J(10000).amount], [9250, 13000, 0, 7000, null]);
+  assert.deepStrictEqual([P.mult(0.2, 2), P.mult(99, 2), P.mult(2.3, 2), P.mult(0, 2), P.mult(NaN, 3), P.mult(-1, 3)], [0.5, 10, 2.5, 2, 3, 3]);
+  assert.deepStrictEqual([P.judge({ avg:0, price:100, atr:5 }), P.judge({ avg:100, price:100, atr:0 }), P.judge({ avg:100, price:null, atr:5 }), P.judge(null)], [null, null, null, null]);
+  /* 실제 일봉: 분석 결과를 그대로 넣어도 같은 규칙 */
+  const a = QT.Analysis.core(sample, 'KRW'), r = P.judge({ avg:a.price, price:a.price, atr:a.atr, score:a.score, market:a.market });
+  assert.ok(Math.abs(r.stop.v - (a.price - 2 * a.atr)) < 1e-6 && Math.abs(r.take.v - (a.price + 3 * a.atr)) < 1e-6 && (r.action === 'add') === (a.score >= 18));
+});
 console.log(process.exitCode ? '계산 검증 실패' : '계산 검증 통과 (' + passed + '개 항목)');
 if (!REPORT || process.exitCode) return;
 
@@ -206,7 +303,7 @@ console.log('\n신뢰도 리포트 — ' + uni.length + '종목 (' + (KRX ? '공
     }
   });
   const avg = {}; Object.keys(byDay).forEach(function (k) { avg[k] = mean(byDay[k]); });
-  console.log('① 종합 점수 등급별 ' + H + '거래일 뒤 수익률');
+  console.log('① 종합 점수 등급별 ' + H + '거래일 뒤 수익률 (종목 자체 점수 — 시장 반영 전)');
   [2, 1, 0, -1, -2].forEach(function (c) {
     const a = rows.filter(function (x) { return x.c === c; });
     if (!a.length) return;
@@ -242,4 +339,63 @@ console.log('\n신뢰도 리포트 — ' + uni.length + '종목 (' + (KRX ? '공
   console.log('   → 도달확률은 추세를 넣지 않은 값이라, 시장이 오른 기간에는 위쪽 목표의 실제 도달률이 더 높고 손절은 더 낮게 나옵니다.\n');
   console.log('③ 종목별 신호 신뢰도 판정 분포 (오늘 등급 기준)');
   console.log('   ' + JSON.stringify(verdicts) + '\n   good/bad = 기저와 유의하게 다름, avg = 우연 범위, few = 겹치지 않는 표본 8회 미만, cls0 = 중립 등급');
+})();
+
+/* 시장(종합 지수) 반영의 근거 — 종목 자체 점수가 강력 매수인 날을 그날의 지수 상태로 나눠 다음 거래일을 본다 */
+(function () {
+  const MK = (readJson('assets/data/markets.json') || { items:{} }).items, S = QT.Scoring;
+  const SYM = {}; ((readJson('assets/data/symbols.json') || {}).items || []).forEach(function (x) { SYM[x.c] = x.m; });
+  const BENCH = { KOSPI:'KOSPI', KOSDAQ:'KOSDAQ', NASDAQ100:'IXIC', 'S&P500':'SPX', US:'IXIC' }, NAME = { KOSPI:'코스피', KOSDAQ:'코스닥', IXIC:'나스닥', SPX:'S&P 500' };
+  const g = {};
+  uni.forEach(function (u) {
+    const k = BENCH[(KRX && KRX.items[u.code] && KRX.items[u.code].m) || SYM[u.code]], it = k && MK[k];
+    if (!it || !it.h) return;
+    const mk = { key:k, name:NAME[k], h:it.h }, b = u.bars, n = b.length, x = I.set(b);
+    for (let i = 200; i < n - 1; i++){
+      const sc = S.at(b, x, i, { market:mk });
+      if (sc.own < 55) continue;
+      const key = (u.cur === 'USD' ? '미국' : '국내') + ' · ' + (!sc.market ? '지수 일봉 없음' : sc.market.risk ? '시장 급락    ' : '그 밖        ');
+      (g[key] = g[key] || []).push({ r1:(b[i + 1].c / b[i].c - 1) * 100, r10:i + H < n ? (b[i + H].c / b[i].c - 1) * 100 : null });
+    }
+  });
+  console.log('\n④ 시장(종합 지수) 반영 — 종목 자체 점수가 강력 매수인 날의 다음 거래일 (급락 = 소속 지수 당일 ≤ ' + S.MARKET.day + '% 또는 3거래일 ≤ ' + S.MARKET.d3 + '%)');
+  Object.keys(g).sort().forEach(function (k) {
+    const a = g[k], r10 = a.filter(function (q) { return q.r10 != null; }).map(function (q) { return q.r10; });
+    console.log('   ' + k + ' n=' + String(a.length).padStart(6) + '  −5% 이하 ' + pc(a.filter(function (q) { return q.r1 <= -5; }).length / a.length).padStart(6) +
+      '  +5% 이상 ' + pc(a.filter(function (q) { return q.r1 >= 5; }).length / a.length).padStart(6) + '  평균 ' + mean(a.map(function (q) { return q.r1; })).toFixed(2).padStart(6) + '%' +
+      '  · ' + H + '거래일 뒤 평균 ' + mean(r10).toFixed(2).padStart(6) + '%');
+  });
+  console.log('   → 급락 상태의 −5% 이하 비율이 그 밖보다 뚜렷이 높아야 점수 상한(강력 매수 → 매수)의 근거가 있습니다.\n' +
+    '     ' + H + '거래일 뒤 수익률까지 낮지는 않다면 하락 예측이 아니라 변동폭 경고입니다 — 등급을 매도로 내리지 않는 이유입니다.');
+})();
+
+/* 평단가 기준 손절 · 익절(core/position.js)의 기본 배수가 실제로 어떤 폭인지 — 아무 날 종가에 사서 그 가격을 평단가로 둔다.
+   앱은 '지금'의 ATR 로 선을 다시 긋지만 여기서는 산 날의 ATR 로 고정한다(나중 변동성을 미리 알 수 없으므로) */
+(function () {
+  const R = QT.Position.RULE, S = QT.Scoring, W = [10, 20, 60], g = {};
+  function add(key, o){ const x = g[key] = g[key] || { n:0, stop:0, take:0, none:0, ret:0, hold:0, gap:0 }; x.n++; x[o.hit]++; x.ret += o.ret; x.hold += o.hold; x.gap += o.gap; }
+  uni.forEach(function (u) {
+    if (u.cur !== 'KRW') return;
+    const b = u.bars, n = b.length, x = I.set(b);
+    for (let i = 200; i < n - W[W.length - 1]; i += 3){
+      const p = b[i].c, atr = x.atr[i]; if (!(atr > 0)) continue;
+      const stop = p - R.stop * atr, take = p + R.take * atr, strong = S.at(b, x, i).score >= 55;
+      W.forEach(function (w) {
+        const hold = (b[i + w].c / p - 1) * 100;
+        let hit = 'none', ret = hold;
+        /* 같은 봉에서 두 선에 모두 닿으면 일봉으로는 순서를 알 수 없다 — 보수적으로 손절 먼저 */
+        for (let k = i + 1; k <= i + w && hit === 'none'; k++){ if (b[k].l <= stop){ hit = 'stop'; ret = (stop / p - 1) * 100; } else if (b[k].h >= take){ hit = 'take'; ret = (take / p - 1) * 100; } }
+        const o = { hit:hit, ret:ret, hold:hold, gap:atr / p * 100 };
+        add(w + '|전체          ', o); if (strong) add(w + '|강력 매수인 날에 삼', o);
+      });
+    }
+  });
+  console.log('\n⑤ 평단가 기준 손절 ' + R.stop + ' ATR · 익절 ' + R.take + ' ATR — 국내 종목을 아무 날 종가에 샀을 때 (먼저 닿은 선에서 판 것으로 계산)');
+  Object.keys(g).sort(function (a, b) { return parseInt(a) - parseInt(b) || (a < b ? -1 : 1); }).forEach(function (k) {
+    const x = g[k], z = k.split('|');
+    console.log('   ' + z[0].padStart(2) + '거래일 안 · ' + z[1] + ' n=' + String(x.n).padStart(6) + '  손절선 먼저 ' + pc(x.stop / x.n).padStart(6) + '  익절선 먼저 ' + pc(x.take / x.n).padStart(6) +
+      '  둘 다 안 닿음 ' + pc(x.none / x.n).padStart(6) + '  평균 손익 ' + (x.ret / x.n).toFixed(2).padStart(6) + '%  · 선 없이 그냥 보유 ' + (x.hold / x.n).toFixed(2).padStart(6) + '%  (ATR 평균 ' + (x.gap / x.n).toFixed(1) + '%)');
+  });
+  console.log('   → 손절선이 익절선보다 가까워(2 대 3) 추세가 없다면 손절 60% · 익절 40% 로 닿는 것이 기대값입니다. 평균 손익이 그냥 보유보다 높지 않다면\n' +
+    '     이 규칙은 수익을 늘리는 장치가 아니라 한 번의 손실 · 이익 폭을 미리 정해 두는 장치입니다. 상승장 구간의 수치라 다른 장세에서는 달라집니다.');
 })();
