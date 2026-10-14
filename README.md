@@ -54,6 +54,18 @@ GitHub Actions (pages.yml) ── 공공데이터 API ──▶ .cache/krx/<날�
 종목별 일봉 파일(수천 개)은 **커밋하지 않습니다**. 매일 새로 쓰면 저장소가 1년에 수 GB씩 불어나기 때문에,
 GitHub Pages 소스를 `GitHub Actions`로 두고 배포할 때마다 만듭니다. `pages` 워크플로는 main 푸시 · `build-data` 수집 직후 · 평일 예약 · 수동 실행 때 돕니다.
 
+배포가 잘못될 때의 동작 (`python3 tools/verify_krx.py` 로 검증):
+
+| 상황 | 결과 |
+|---|---|
+| 공공데이터 API를 부르지 못함 (시간 초과 · 키 문제 · 일일 한도) | 이미 받아 둔 날짜(`.cache/krx`)로 일봉을 만들어 배포하고 실행에 경고를 남깁니다. 기준일이 일주일 넘게 묵으면 오류로 표시합니다 |
+| API도 안 되고 받아 둔 날짜도 없음 | 빌드를 실패시켜 **배포하지 않습니다** — 국내 일봉이 빠진 사이트를 올리지 않고 직전 배포를 그대로 둡니다 |
+| 서비스키(`DATA_GO_KR_KEY`)가 없음 | 공공데이터를 건너뛰고 번들 데이터만으로 배포합니다 |
+| 실행 하나가 멈춤 | 다음 실행이 들어오면 멈춘 실행을 취소하고 이어받습니다 (`concurrency.cancel-in-progress: true`) |
+
+실제 사이트가 오래된 것 같으면 `gh run list --workflow pages` 에서 끝나지 않은 실행이 있는지,
+`https://<사이트>/assets/data/krx/quotes.json` 의 `basDt`가 최근 영업일인지 확인하세요.
+
 ## 데이터 출처 (중요)
 
 | 항목 | 출처 | 성격 |
@@ -395,6 +407,7 @@ node tools/verify_learn.js         # 실패하면 종료 코드 1
 node tools/verify_ta.js            # 계산 검증 — 지표를 참조 구현과 전 구간 비교, 피봇 · 마감 시각 · 품질 · 확률 · 신뢰도 판정 · 시장 반영 · 포지션 판단
 node tools/verify_ta.js --report   # + 과거 데이터로 실제 적중률 측정 (등급별 수익률 · 도달확률 보정 · 신뢰도 판정 분포 · 시장 급락 상태별 성적 · 손절/익절선 도달)
 node tools/verify_import.js        # 잔고 가져오기 — 구분자 · 열 제목 찾기 · 간단 입력 · 엑셀/HTML/EUC-KR 파일 (가짜 잔고로 검증)
+python3 tools/verify_krx.py        # 공공데이터 수집기 — 정상 수집 · API 실패 시 받아 둔 날짜로 만들기 (네트워크 없이 가짜 응답으로 검증)
 ```
 2026-10 측정(국내 시가총액 상위 150 + 번들 미국 종목, 약 1년): 지표 계산은 참조 구현과 일치합니다.
 종합 점수 등급은 10거래일 뒤 수익률과 **통계적으로 유의한 관계가 없었습니다** — 등급은 '현재 추세 상태'의 요약이지
@@ -520,6 +533,7 @@ tools/build_krx.py             공공데이터포털 금융위원회_주식시�
 tools/build_*.py               데이터 수집 스크립트
 tools/verify_ta.js             기술적 분석 검증 (지표 참조 구현 비교 · 과거 데이터 적중률 리포트)
 tools/verify_import.js         잔고 가져오기 검증 (구분자 · 열 찾기 · 엑셀/HTML/EUC-KR)
+tools/verify_krx.py            공공데이터 수집기 검증 (API 실패 · 캐시만으로 만들기 · 키 없음)
 tools/verify_learn.js          주식 공부 학습 내용 검증 (숫자 예시 재계산 · 앱 계산과 일치 · 그림 · 제도 수치)
 .github/workflows/pages.yml    공공데이터 일봉 생성 + GitHub Pages 배포
 .github/workflows/build-data.yml  시세 · 일정 · 뉴스 · 재무 스냅샷 수집 후 커밋

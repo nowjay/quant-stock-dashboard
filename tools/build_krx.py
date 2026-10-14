@@ -18,6 +18,12 @@
 
 서비스키: 환경변수 DATA_GO_KR_KEY 또는 프로젝트 루트 .env 의 DATA_GO_KR_KEY (일반 인증키 Decoding 값)
 실행: python3 tools/build_krx.py            키가 없으면 경고만 남기고 종료(0)합니다
+
+API 를 부르지 못할 때 (시간 초과 · 키 문제 · 일일 한도)
+  · 이미 받아 둔 날짜(.cache/krx)가 있으면 그것으로 만들고 경고를 남긴 뒤 0 으로 끝냅니다 —
+    하루 이틀 늦은 시세가, 국내 일봉이 통째로 빠진 사이트보다 낫습니다
+  · 받아 둔 날짜도 없으면 1 로 끝냅니다 → 배포 워크플로가 배포를 멈추고 직전 배포를 그대로 둡니다
+검증: python3 tools/verify_krx.py
 """
 import json, os, shutil, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
@@ -42,6 +48,7 @@ RECENT_DAYS = 10                                         # 이 기간의 빈 날
 PAGE = 3000
 WORKERS = 4
 FATAL = ('20', '22', '30', '31', '32', '33')             # 접근 거부 · 일일 한도 · 미등록/기한만료 키
+STALE_DAYS = 7                                           # 받아 둔 시세로만 만들 때, 기준일이 이보다 묵었으면 오류로 알린다
 NEW = []                                                 # 새로 받은 날짜 (캐시 저장 여부 판단)
 
 
@@ -211,6 +218,16 @@ def write_cache(kind, day, rows):
     os.replace(tmp, cache_path(kind, day))
 
 
+def cached(kind, days):
+    """이미 받아 둔 날짜만 — API 를 부르지 못할 때 쓴다. 반환: {날짜: rows} (캐시에 없는 날짜는 빠진다)"""
+    out = {}
+    for d in days:
+        c = read_cache(kind, d)
+        if c is not None:
+            out[d] = c['rows']
+    return out
+
+
 def sync(kind, key, days):
     """없는 날짜와 최근의 빈 날짜만 받는다. 반환: {날짜: rows} (받지 못한 날짜는 None)"""
     recent = (datetime.now(KST) - timedelta(days=RECENT_DAYS)).strftime('%Y%m%d')
@@ -310,16 +327,24 @@ def main():
     days = weekdays(WEEKDAYS, today - timedelta(days=1))  # 당일 시세는 다음 날 게시
     print('공공데이터 주식시세 %s ~ %s (평일 %d일)' % (days[0], days[-1], len(days)))
 
+    failed = None                                        # API 를 부르지 못해 받아 둔 날짜만으로 만드는 경우의 사유
     try:
         stock = sync('stock', key, days)
     except ApiError as e:
-        print('::error::주식시세정보 호출 실패 — %s. 활용신청 · 서비스키(Decoding)를 확인하세요.' % e)
-        return 1
+        # 일시적인 장애(시간 초과 등) 한 번에 사이트의 국내 일봉이 통째로 사라지지 않도록, 받아 둔 날짜로 만든다
+        stock = cached('stock', days)
+        if not any(stock.values()):
+            print('::error::주식시세정보 호출 실패 — %s. 받아 둔 시세도 없어 만들 수 없습니다. 활용신청 · 서비스키(Decoding)를 확인하세요.' % e)
+            return 1
+        failed = e
     try:
         etf = sync('etf', key, days)
     except ApiError as e:
-        etf = {}
-        print('  (ETF 건너뜀: %s — ETF 도 공공데이터로 보려면 금융위원회_증권상품시세정보 활용신청)' % e)
+        etf = cached('etf', days)
+        if any(etf.values()):
+            print('  (ETF 는 받아 둔 날짜만 사용: %s)' % e)
+        else:
+            print('  (ETF 건너뜀: %s — ETF 도 공공데이터로 보려면 금융위원회_증권상품시세정보 활용신청)' % e)
 
     table = {}
     for d in days:
@@ -386,6 +411,12 @@ def main():
     print('완료: 기준일 %s · %d종목 (ETF %s) · 거래일 %d일%s' % (
         meta['basDt'], n, '포함' if etf_days else '없음', len(trading),
         (' · 미수신 %d일' % len(missing)) if missing else ''))
+    if failed is not None:
+        # 한두 번은 일시적 장애다. 기준일이 일주일 넘게 묵었으면 키 · 활용신청 문제일 가능성이 커서 오류로 올린다
+        age = (today - datetime.strptime(last, '%Y%m%d').date()).days
+        print('::%s::주식시세정보 호출 실패 — %s. 새 날짜를 받지 못해 받아 둔 시세(기준일 %s, %d일 전)로 만들었습니다.%s' % (
+            'error' if age > STALE_DAYS else 'warning', failed, meta['basDt'], age,
+            ' 활용신청 · 서비스키(Decoding)를 확인하세요.' if age > STALE_DAYS else ''))
     return 0
 
 
