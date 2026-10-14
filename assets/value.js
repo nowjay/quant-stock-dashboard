@@ -74,7 +74,8 @@ window.QT = window.QT || {};
           [t.marketCut ? '기술 ' + techTxt(c) : '', c.total !== c.own ? '종합 ' + c.own + '→' + c.total : ''].filter(Boolean).join(' · ') + '점으로 제한했습니다.' + ctx.tip('market') + '</p>' : '') +
         '<div class="sg-duo">' +
           '<div class="sg-half"><div class="sg-h"><span>기술 점수</span>' + badge(c.techGrade, techPts, true) + '</div>' +
-            (t ? partRows(t.parts, t.marketCut ? '<div class="pt pen"><span class="pt-n">시장 급락 상한</span><span></span><b class="num down">−' + t.marketCut + '</b><small class="pt-note">' + mkLine(t.market) + ' — 강력 매수를 내지 않습니다</small></div>' : '')
+            (t ? partRows(t.parts, (t.adj.pts || t.adj.note ? '<div class="pt pen"><span class="pt-n">캔들 · 추세추종</span><span></span><b class="num ' + cls(t.adj.pts) + '">' + (t.adj.pts > 0 ? '+' : t.adj.pts < 0 ? '−' : '') + Math.abs(t.adj.pts) + '</b><small class="pt-note">' + (t.adj.note || '최근 신호 없음') + '</small></div>' : '') +
+              (t.marketCut ? '<div class="pt pen"><span class="pt-n">시장 급락 상한</span><span></span><b class="num down">−' + t.marketCut + '</b><small class="pt-note">' + mkLine(t.market) + ' — 강력 매수를 내지 않습니다</small></div>' : ''))
                : '<p class="muted sm">실제 일봉이 부족해 계산하지 않았습니다.</p>') + '</div>' +
           '<div class="sg-half"><div class="sg-h"><span>재무 점수</span>' + badge(c.fundGrade, fundPts, true) + '</div>' +
             (fa ? partRows(fa.scoring.parts, fa.scoring.penalty ? '<div class="pt pen"><span class="pt-n">재무 위험 감점</span><span></span><b class="num down">−' + fa.scoring.penalty + '</b><small class="pt-note">' + fa.scoring.penaltyNote + '</small></div>' : '')
@@ -508,7 +509,7 @@ window.QT = window.QT || {};
   function techOf(code, a){
     if (!a || !a.daily || !M.isReal(code)) return null;
     if (a.quality && a.quality.level === 'low') return null;       // 거래정지 · 봉 부족 — 스크리너(signal.js)와 같은 기준
-    return S.tech(M.daily(code), a.daily.ind, a.daily.market);
+    return S.tech(M.daily(code), a.daily.ind, a.daily.market, { open:a.daily.open });
   }
   function render(force){
     const el = $('#panel-value'), st = view.st, a = view.a;

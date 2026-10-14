@@ -151,15 +151,27 @@ window.QT = window.QT || {};
     return out;
   }
   /* 두 시계열의 최근 교차: dir 1 = a가 b를 상향 돌파, ago = 최근 봉 기준 경과 봉수 */
-  function lastCross(a, b, lookback){
-    const n = Math.min(a.length, b.length), start = Math.max(1, n - lookback);
-    for (let i = n - 1; i >= start; i--){
+  function lastCross(a, b, lookback){ return crossAt(a, b, Math.min(a.length, b.length) - 1, lookback); }
+  /* at 번째 봉 시점에서 본 최근 교차 (그 봉까지의 값만 사용 · 최근 lookback 봉 안, ago = at 기준 경과 봉수) */
+  function crossAt(a, b, at, lookback){
+    const start = Math.max(1, at + 1 - lookback);
+    for (let i = at; i >= start; i--){
       if (a[i] == null || b[i] == null || a[i-1] == null || b[i-1] == null) continue;
       const before = a[i-1] - b[i-1], now = a[i] - b[i];
-      if (before <= 0 && now > 0) return { i:i, dir:1, ago:n - 1 - i };
-      if (before >= 0 && now < 0) return { i:i, dir:-1, ago:n - 1 - i };
+      if (before <= 0 && now > 0) return { i:i, dir:1, ago:at - i };
+      if (before >= 0 && now < 0) return { i:i, dir:-1, ago:at - i };
     }
     return null;
+  }
+  /* 가격 채널(돈치안): 그 봉을 뺀 직전 p봉의 최고가 · 최저가 — 종가가 이 밖으로 나가면 돌파 */
+  function channel(bars, p){
+    const n = bars.length, hi = new Array(n).fill(null), lo = new Array(n).fill(null);
+    for (let i = p; i < n; i++){
+      let h = -Infinity, l = Infinity;
+      for (let j = i - p; j < i; j++){ if (bars[j].h > h) h = bars[j].h; if (bars[j].l < l) l = bars[j].l; }
+      hi[i] = h; lo[i] = l;
+    }
+    return { hi:hi, lo:lo };
   }
   /* 52주(달력 365일) 구간이 시작하는 인덱스 — 봉 개수 252개로 자르면 휴장일이 많은 국내 종목은
      1년보다 한 달 가까이 더 거슬러 올라가 52주 최고 · 최저가 틀어진다 (일 · 주 · 월봉 모두 사용 가능) */
@@ -205,9 +217,9 @@ window.QT = window.QT || {};
   }
   function set(bars){
     const c = bars.map(function (b) { return b.c; });
-    const bb = bollinger(c, 20, 2), md = macd(c, 12, 26, 9), dm = adx(bars, 14);
+    const bb = bollinger(c, 20, 2), md = macd(c, 12, 26, 9), dm = adx(bars, 14), ch = channel(bars, 20);
     return {
-      close:c,
+      close:c, chHi:ch.hi, chLo:ch.lo,
       sma5:sma(c,5), sma10:sma(c,10), sma20:sma(c,20), sma50:sma(c,50),
       sma60:sma(c,60), sma120:sma(c,120), sma200:sma(c,200), ema20:ema(c,20),
       bbUp:bb.up, bbMid:bb.mid, bbLow:bb.lo,
@@ -219,6 +231,6 @@ window.QT = window.QT || {};
   }
 
   QT.Indicators = { sma:sma, ema:ema, bollinger:bollinger, rsi:rsi, macd:macd,
-    stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, adx:adx, obv:obv, mfi:mfi, lastCross:lastCross,
+    stochastic:stochastic, cci:cci, williamsR:williamsR, atr:atr, adx:adx, obv:obv, mfi:mfi, lastCross:lastCross, crossAt:crossAt, channel:channel,
     yearStart:yearStart, periodKey:periodKey, sessionTime:sessionTime, prevPeriod:prevPeriod, set:set };
 })(window.QT);

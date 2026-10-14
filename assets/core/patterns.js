@@ -3,7 +3,7 @@
 
    · 이동평균 골든/데드크로스 (20·50, 50·200), MACD 시그널 교차
    · RSI 다이버전스 (가격 신저가인데 RSI 는 높은 저점 → 상승 / 반대 → 하락)
-   · 캔들 패턴 (장악형 · 망치형 · 유성형 · 도지) — 직전 흐름을 함께 봄
+   · 캔들 (연속 음봉 · 양봉, 긴 위꼬리 · 아래꼬리, 장악형, 장대봉, 도지) — 판정은 candles.js
    · 20일 박스권 돌파/이탈 (거래량 동반 여부), 거래량 급증
    반환: [{ i, t, dir(+1/−1/0), kind, title, desc, weight }] 최신순
    ============================================================= */
@@ -76,22 +76,14 @@ window.QT = window.QT || {};
       break;
     }
 
-    /* 캔들 패턴 — 최근 5봉, 직전 5봉 흐름과 함께 판단 */
+    /* 캔들 — 최근 5봉. 판정은 candles.js (종합 점수에 들어가는 것과 같은 신호) */
     for (let i = Math.max(6, n - 5); i <= done; i++){
-      const b = bars[i], p = bars[i - 1], body = Math.abs(b.c - b.o), range = b.h - b.l;
-      if (!(range > 0)) continue;
-      const prior = (p.c - bars[i - 6].c) / bars[i - 6].c;
-      const upper = b.h - Math.max(b.o, b.c), lower = Math.min(b.o, b.c) - b.l;
-      if (b.c > b.o && p.c < p.o && b.c >= p.o && b.o <= p.c && body > Math.abs(p.c - p.o) && prior < 0)
-        push(i, 1, 'candle', '상승 장악형 캔들', '하락 뒤 양봉이 전날 음봉 몸통을 완전히 감쌌습니다. 매수세가 주도권을 가져온 반전 신호입니다.', 2);
-      else if (b.c < b.o && p.c > p.o && b.o >= p.c && b.c <= p.o && body > Math.abs(p.c - p.o) && prior > 0)
-        push(i, -1, 'candle', '하락 장악형 캔들', '상승 뒤 음봉이 전날 양봉 몸통을 감쌌습니다. 매도세가 우세해진 반전 신호입니다.', 2);
-      else if (lower >= body * 2 && upper <= body * 0.6 && body / range < 0.4 && prior < -0.02)
-        push(i, 1, 'candle', '망치형 캔들', '하락 중 긴 아래꼬리가 생겼습니다. 저가 매수세가 들어와 바닥을 다질 수 있다는 신호입니다.', 1);
-      else if (upper >= body * 2 && lower <= body * 0.6 && body / range < 0.4 && prior > 0.02)
-        push(i, -1, 'candle', '유성형 캔들', '상승 중 긴 위꼬리가 생겼습니다. 고가에서 매도 물량이 나와 상승이 막힐 수 있습니다.', 1);
-      else if (body / range < 0.1 && Math.abs(prior) > 0.03)
-        push(i, 0, 'candle', '도지 캔들', '시가와 종가가 거의 같아 매수·매도 힘이 팽팽합니다. 추세가 바뀌기 직전에 자주 나타납니다.', 1);
+      const next = i < done ? QT.Candles.read(bars, ind, i + 1) : [];
+      QT.Candles.read(bars, ind, i).forEach(function (s) {
+        /* 연속 봉은 이어지는 동안 날마다 다시 잡힌다 — 가장 길어진 마지막 날만 남긴다 */
+        if (s.key === 'run' && next.some(function (x) { return x.key === 'run' && x.dir === s.dir; })) return;
+        push(i, s.dir, 'candle', s.title, s.desc, s.v >= 0.8 ? 2 : 1);
+      });
     }
 
     /* 20일 박스권 돌파/이탈 · 거래량 급증 (최근 10봉) */
