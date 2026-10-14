@@ -882,7 +882,8 @@ a.nw:hover{border-color:var(--line);box-shadow:var(--shadow-md)}
 .mkw > b:first-child{display:flex;align-items:center;gap:4px;font-weight:800;margin-bottom:2px}
 .mkw .muted{color:inherit;opacity:.75}
 .cats{display:flex;flex-direction:column;gap:7px;margin-top:14px;text-align:left}
-.cat{display:grid;grid-template-columns:48px 1fr 40px;align-items:center;gap:8px;font-size:12px}
+.cat{display:grid;grid-template-columns:52px 1fr 44px;align-items:center;gap:8px;font-size:12px}
+.cat:not(.adj) + .cat.adj{border-top:1px dashed var(--line);padding-top:7px}
 .cat > span:first-child{color:var(--ink-2);font-weight:700}
 .cat .bar{position:relative;height:8px;border-radius:4px;background:var(--hair)}
 .cat .bar::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}

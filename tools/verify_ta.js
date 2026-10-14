@@ -12,12 +12,14 @@
       · 분석 신뢰도(데이터 품질) 판정 · 도달확률 · 신호 신뢰도 판정(겹치지 않는 표본 · 유의성)
       · 시장(종합 지수) 반영 — 급락 판단 · 점수 상한 · 과거 봉에 미래 지수를 쓰지 않는지
       · 평단가 기준 포지션 판단 — 손절선 · 익절선 · 추가 매수 조건
+      · 캔들(연속 봉 · 꼬리 · 장악형 · 장대봉) 판정 · 추세추종 신호 · 점수 가감 (지표 점수 + 가감 = 종합 점수, 미래 봉 · 진행 중인 봉 미사용)
    ② 신뢰도 리포트 — '그 시점까지의 데이터만' 써서 과거 각 시점에 같은 계산을 적용
       · 종합 점수 등급별 10거래일 뒤 수익률 (같은 날 종목 평균 대비)
       · 목표가 · 손절가의 표시 도달확률 vs 실제 도달률 (보정 상태)
       · 종목별 '신호 신뢰도' 판정 분포
       · 시장 급락 상태별 강력 매수 다음 거래일 성적 (점수 상한의 근거 — assets/data/markets.json 의 지수 일봉 약 1년)
       · 평단가 기준 손절 2 ATR · 익절 3 ATR — 아무 날 종가에 샀을 때 어느 선에 먼저 닿았나
+      · 캔들 · 추세추종 신호별 이후 수익률 (신호 가감의 근거 — 같은 날 종목 평균 대비)
    데이터: assets/data/krx/d (공공데이터 일봉, 있으면) + assets/data/history.json (번들 일봉)
    ============================================================= */
 'use strict';
@@ -29,7 +31,7 @@ const N = +(args[args.indexOf('--n') + 1]) > 0 && args.indexOf('--n') >= 0 ? +ar
 const win = { QT:{} };
 const ctx = vm.createContext({ window:win, console:console, Intl:Intl, Date:Date, Math:Math, isFinite:isFinite,
   fetch:function () { return Promise.reject(new Error('fetch 없음')); } });
-['market-data', 'indicators', 'scoring', 'position', 'patterns', 'targets', 'analysis', 'backtest', 'signal'].forEach(function (m) {
+['market-data', 'indicators', 'candles', 'scoring', 'position', 'patterns', 'targets', 'analysis', 'backtest', 'signal'].forEach(function (m) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'assets/core', m + '.js'), 'utf8'), ctx, { filename:m + '.js' });
 });
 const QT = win.QT, I = QT.Indicators, M = QT.Market;
@@ -282,6 +284,141 @@ check('평단가 기준 포지션 판단 — 손절선 · 익절선 · 추가 �
   const a = QT.Analysis.core(sample, 'KRW'), r = P.judge({ avg:a.price, price:a.price, atr:a.atr, score:a.score, market:a.market });
   assert.ok(Math.abs(r.stop.v - (a.price - 2 * a.atr)) < 1e-6 && Math.abs(r.take.v - (a.price + 3 * a.atr)) < 1e-6 && (r.action === 'add') === (a.score >= 18));
 });
+/* 캔들 검증용 일봉: 시가 = 종가 100 · 고저 ±1 인 봉 40개(ATR 2 · 20일선 100) 뒤에 rows([시, 고, 저, 종]) 를 붙인다 */
+function candles(rows){
+  const b = [];
+  for (let i = 0; i < 40; i++) b.push([100, 101, 99, 100]);
+  return b.concat(rows).map(function (r, i) { return { t:Date.UTC(2026, 0, 5, 6, 30) + i * 86400000, o:r[0], h:r[1], l:r[2], c:r[3], v:1000 }; });
+}
+/* 마지막 봉이 만든 key 신호 → [방향, 세기, 제목] (없으면 null) */
+function candleSig(rows, key){
+  const b = candles(rows), s = Array.from(QT.Candles.read(b, I.set(b), b.length - 1)).filter(function (x) { return x.key === key; })[0];
+  return s ? [s.dir, +s.v.toFixed(2), s.title] : null;
+}
+const UP3 = [[100, 102, 100, 102], [102, 104, 102, 104], [104, 106, 104, 106]], DOWN3 = [[100, 100, 98, 98], [98, 98, 96, 96], [96, 96, 94, 94]];
+check('캔들 — 연속 음봉 · 양봉 (3개부터 · 자리에 따라 세기 · 종가가 같은 방향으로 움직였을 때만)', function () {
+  const top = [[100, 104, 100, 104], [104, 108, 104, 108], [108, 108.5, 106.5, 107], [107, 107.5, 105.5, 106]];
+  assert.strictEqual(candleSig(top, 'run'), null);                                                        // 음봉 2개는 신호가 아니다
+  assert.deepStrictEqual(candleSig(top.concat([[106, 106.5, 104.5, 105]]), 'run'), [-1, 0.6, '음봉 3연속 (흑삼병)']);     // 20일선 위 = 꺾이는 자리
+  assert.deepStrictEqual(candleSig(top.concat([[106, 106.5, 104.5, 105], [105, 105.5, 103.5, 104]]), 'run'), [-1, 0.8, '음봉 4연속 (흑삼병)']);
+  assert.deepStrictEqual(candleSig([[100, 100.5, 98.5, 99], [99, 99.5, 97.5, 98], [98, 98.5, 96.5, 97]], 'run'), [-1, 0.3, '음봉 3연속 (흑삼병)']);   // 20일선 아래 = 절반
+  assert.deepStrictEqual(candleSig([[100, 100.5, 99.5, 99.9], [99.9, 100.4, 99.4, 99.8], [99.8, 100.3, 99.3, 99.7]], 'run'), [-1, 0.3, '음봉 3연속']);   // 몸통이 작으면 삼병은 아니다
+  assert.strictEqual(candleSig([[101, 101.5, 100.2, 100.5], [102, 102.5, 101, 101.5], [103, 103.5, 102, 102.5]], 'run'), null);    // 갭으로 올라 종가는 오른 음봉들
+  assert.deepStrictEqual(candleSig([[100, 100, 95, 95], [95, 95, 90, 90], [90, 91.5, 89.8, 91], [91, 92.5, 90.8, 92], [92, 93.5, 91.8, 93]], 'run'), [1, 0.6, '양봉 3연속 (적삼병)']);
+  assert.deepStrictEqual(candleSig([[100, 101.5, 99.8, 101], [101, 102.5, 100.8, 102], [102, 103.5, 101.8, 103]], 'run'), [1, 0.3, '양봉 3연속 (적삼병)']);
+  /* 시가 = 종가인 봉에서 끊긴다 */
+  assert.deepStrictEqual(Array.from([0, 1].map(function (k) { const b = candles(top.concat([[106, 107, 105, 106], [106, 106.5, 104.5, 105]])); return QT.Candles.run(b, b.length - 1 - k).n; })), [1, 0]);
+});
+check('캔들 — 꼬리 (봉 길이의 절반 이상 · 직전 흐름에 따라 유성형 · 망치형 · 신호 없음)', function () {
+  assert.deepStrictEqual(candleSig(UP3.concat([[106, 110, 105.8, 106.2]]), 'wick'), [-1, 0.8, '유성형 캔들 (긴 위꼬리)']);
+  assert.deepStrictEqual(candleSig([[100, 104, 99.8, 100.2]], 'wick'), [-1, 0.5, '긴 위꼬리']);
+  assert.strictEqual(candleSig(DOWN3.concat([[94, 98, 93.8, 94.2]]), 'wick'), null);                      // 하락 뒤 위꼬리(역망치형)
+  assert.deepStrictEqual(candleSig(DOWN3.concat([[94, 94.2, 90, 93.8]]), 'wick'), [1, 0.8, '망치형 캔들 (긴 아래꼬리)']);
+  assert.deepStrictEqual(candleSig([[100, 100.2, 96, 99.8]], 'wick'), [1, 0.5, '긴 아래꼬리']);
+  assert.strictEqual(candleSig(UP3.concat([[106, 106.2, 102, 105.8]]), 'wick'), null);                    // 상승 뒤 아래꼬리(교수형)
+  assert.strictEqual(candleSig([[100, 100.6, 99.9, 100]], 'wick'), null);                                 // 봉이 너무 짧다 (0.7 ATR 미만)
+  assert.strictEqual(candleSig([[100, 102, 98, 100.1]], 'wick'), null);                                   // 양쪽 꼬리가 모두 길다
+  assert.strictEqual(candleSig([[100, 103, 99, 102]], 'wick'), null);                                     // 꼬리가 봉 길이의 절반 미만
+});
+check('캔들 — 장악형 · 장대봉 · 도지', function () {
+  assert.deepStrictEqual(candleSig([[100, 100.2, 98, 98.2], [98, 101.2, 97.8, 101]], 'body'), [1, 0.8, '상승 장악형 캔들']);
+  assert.deepStrictEqual(candleSig(UP3.concat([[106, 108, 105.8, 107.8], [108, 108.2, 104.8, 105]]), 'body'), [-1, 0.8, '하락 장악형 캔들']);
+  assert.deepStrictEqual(candleSig([[100, 104.2, 99.9, 104]], 'body'), [1, 0.5, '장대양봉']);
+  assert.deepStrictEqual(candleSig([[100, 100.1, 95.8, 96]], 'body'), [-1, 0.5, '장대음봉']);
+  assert.strictEqual(candleSig([[100, 103, 99.5, 102]], 'body'), null);                                   // 몸통 2 = 1 ATR — 장대봉 기준(1.5 ATR) 미달
+  assert.deepStrictEqual(candleSig(UP3.concat([[106, 107, 105, 106.05]]), 'doji'), [0, 0, '도지 캔들']);
+  assert.strictEqual(candleSig([[100, 101, 99, 100.05]], 'doji'), null);                                  // 직전 흐름이 없으면 도지도 보지 않는다
+});
+check('캔들 점수 — 연속 봉은 지금 상태, 꼬리 · 몸통은 3봉 동안 1 · 0.6 · 0.3', function () {
+  const flat = [106, 107, 105, 106], star = UP3.concat([[106.2, 110, 105.8, 106]]);                      // 유성형(음봉) 뒤 시가 = 종가인 봉
+  const vOf = function (rows) { const b = candles(rows), a = QT.Candles.at(b, I.set(b), b.length - 1); return [+a.v.toFixed(2), a.list.length]; };
+  assert.deepStrictEqual([vOf(star), vOf(star.concat([flat])), vOf(star.concat([flat, flat])), vOf(star.concat([flat, flat, flat]))], [[-0.8, 1], [-0.48, 1], [-0.24, 1], [0, 0]]);
+  /* 방향이 엇갈리면 서로 지우고, 합은 ±1 을 넘지 않는다 */
+  const mix = candles([[100, 100.2, 98, 98.2], [98, 101.2, 97.8, 101], [101, 105, 100.8, 101.2]]), m = QT.Candles.at(mix, I.set(mix), mix.length - 1);
+  assert.deepStrictEqual(Array.from(m.comps, function (c) { return [c.key, +c.v.toFixed(2)]; }), [['run', 0], ['wick', -0.5], ['body', 0.48]]);
+  assert.strictEqual(+m.v.toFixed(2), -0.02);
+  const many = candles([[100, 104, 100, 104], [104, 108, 104, 108], [108, 112, 107.8, 108.2], [108.2, 112, 106.2, 106.4], [106.4, 110, 104.8, 105]]);
+  assert.strictEqual(QT.Candles.at(many, I.set(many), many.length - 1).v, -1);
+});
+check('추세추종 신호 — 크로스(20 · 60봉) · 20일 채널 돌파(10봉)에 걸쳐 약해짐', function () {
+  const S = QT.Scoring, n = sample.length, W = S.SIGNAL.w;
+  /* 참조 구현: 정의대로 뒤에서부터 훑는다 */
+  function refCross(a, b, i, span){
+    for (let j = i; j > i - span && j >= 1; j--){
+      if (a[j] == null || b[j] == null || a[j - 1] == null || b[j - 1] == null) continue;
+      if (a[j - 1] <= b[j - 1] && a[j] > b[j]) return W * (1 - (i - j) / span);
+      if (a[j - 1] >= b[j - 1] && a[j] < b[j]) return -W * (1 - (i - j) / span);
+    }
+    return 0;
+  }
+  function refChan(i){
+    for (let j = i; j > i - 10; j--){
+      const w = sample.slice(j - 20, j), hi = Math.max.apply(null, w.map(function (x) { return x.h; })), lo = Math.min.apply(null, w.map(function (x) { return x.l; }));
+      if (sample[j].c > hi) return W * (1 - (i - j) / 10); if (sample[j].c < lo) return -W * (1 - (i - j) / 10);
+    }
+    return 0;
+  }
+  const seen = { cross:0, xlong:0, chan:0 };
+  for (let i = 210; i < n; i++){
+    const f = S.signals(sample, ind, i).follow, v = {};
+    f.comps.forEach(function (c) { v[c.key] = c.v; if (c.v) seen[c.key]++; });
+    const ref = { cross:refCross(ind.sma20, ind.sma50, i, 20), xlong:refCross(ind.sma50, ind.sma200, i, 60), chan:refChan(i) };
+    Object.keys(ref).forEach(function (k) { assert.ok(Math.abs(v[k] - ref[k]) < 1e-9, k + ' [' + i + '] ' + v[k] + ' ≠ ' + ref[k]); });
+    const sum = Math.max(-1, Math.min(1, ref.cross + ref.xlong + ref.chan)), tr = ind.adx[i] == null ? 0.3 : Math.max(0, Math.min(1, (ind.adx[i] - 15) / 20));
+    assert.ok(Math.abs(f.v - sum) < 1e-9); assert.ok(Math.abs(f.regime - (0.5 + 0.5 * tr)) < 1e-9);
+    assert.ok(f.pts === Math.sign(sum) * Math.round(Math.abs(10 * sum * f.regime)), '추세추종 가감 [' + i + '] ' + f.pts);
+    assert.strictEqual(f.list.length, f.comps.filter(function (c) { return c.v !== 0 || c.value === 0; }).length);
+  }
+  assert.ok(seen.cross && seen.chan, '표본에 20·50일선 크로스와 채널 돌파가 있어야 합니다 ' + JSON.stringify(seen));
+});
+check('신호 가감 — 지표 점수 + 캔들 · 추세추종 = 종합 점수 · 미래 봉 · 진행 중인 봉을 쓰지 않는다', function () {
+  const S = QT.Scoring, n = sample.length;
+  let moved = 0, same = 0;
+  for (let i = 200; i < n; i++){
+    const s = S.at(sample, ind, i), g = s.signals;
+    /* 지표 점수(base)는 세 그룹의 가중 평균만으로 다시 계산해도 같다 — 신호 그룹이 섞여 들어가지 않는다 */
+    let raw = 0, ws = 0;
+    Object.keys(s.weights).forEach(function (k) { if (s.cats[k] != null){ raw += s.weights[k] * s.cats[k]; ws += s.weights[k]; } });
+    assert.strictEqual(s.base, Math.max(-100, Math.min(100, Math.round(raw / ws * 125))));
+    assert.strictEqual(s.own, Math.max(-100, Math.min(100, s.base + g.candle.pts + g.follow.pts)));
+    assert.strictEqual(g.pts, g.candle.pts + g.follow.pts);
+    assert.ok(g.candle.pts === Math.sign(g.candle.v) * Math.round(Math.abs(10 * g.candle.v)), '캔들 가감 [' + i + '] ' + g.candle.pts);
+    assert.ok(Math.abs(g.candle.pts) <= S.SIGNAL.candle && Math.abs(g.follow.pts) <= S.SIGNAL.follow);
+    assert.deepStrictEqual([s.cats.candle, s.cats.follow], [g.candle.v, g.follow.v]);
+    if (g.pts) moved++; else { same++; assert.ok(s.own === s.base); }                                    // 신호가 없는 날은 지표 점수 그대로
+  }
+  assert.ok(moved && same, '표본에 신호가 있는 날과 없는 날이 모두 있어야 합니다');
+  /* 과거 봉의 점수는 그 뒤의 봉이 있든 없든 같다 */
+  [220, 300, n - 30, n - 2].forEach(function (i) {
+    const cut = sample.slice(0, i + 1);
+    assert.strictEqual(S.at(cut, I.set(cut), i).own, S.at(sample, ind, i).own);
+  });
+  /* 진행 중인 마지막 봉: 캔들 · 채널 돌파는 직전에 끝난 봉까지 — 그 봉의 시가 · 고가 · 저가가 어떻든 같다 */
+  const live = sample.map(function (x) { return Object.assign({}, x); }), z = live[n - 1];
+  z.o = z.l = z.c * 0.8; z.h = z.c;                                                                       // 꼬리 없는 +25% 양봉
+  const a = S.signals(sample, ind, n - 1, { open:true }), b = S.signals(live, I.set(live), n - 1, { open:true });
+  assert.strictEqual(a.candle.v, QT.Candles.at(sample, ind, n - 2).v);
+  assert.deepStrictEqual([b.candle.v, b.candle.pts], [a.candle.v, a.candle.pts]);
+  assert.strictEqual(Array.from(b.follow.comps).filter(function (c) { return c.key === 'chan'; })[0].v, Array.from(a.follow.comps).filter(function (c) { return c.key === 'chan'; })[0].v);
+  assert.ok(Array.from(QT.Candles.read(live, I.set(live), n - 1)).some(function (x) { return x.key === 'body' && x.dir > 0; }));   // 끝난 봉이었다면 신호다
+  /* 분석 결과 · 신호 카드 · 스크리너 기술 점수도 같은 신호 */
+  const an = QT.Analysis.core(sample, 'KRW');
+  assert.deepStrictEqual([an.score, an.scoring.base + an.scoring.signals.pts], [S.at(sample, ind, n - 1).score, an.ownScore]);
+  for (let i = n - 60; i < n; i++){
+    const cut = sample.slice(0, i + 1), t = QT.Signal.tech(cut, ind), g = S.signals(cut, ind, i), sum = t.parts.reduce(function (q, x) { return q + x.pts; }, 0);
+    const half = (g.candle.pts + g.follow.pts) / 2, want = Math.sign(half) * Math.round(Math.abs(half));
+    assert.strictEqual(t.raw, Math.max(0, Math.min(100, sum + want))); assert.strictEqual(t.adj.pts, t.raw - sum);
+    assert.ok(Math.abs(t.adj.pts) <= 10);
+  }
+});
+check('최근 신호 카드 — 캔들은 점수와 같은 판정 · 연속 봉은 마지막 날만 · 진행 중인 봉 제외', function () {
+  const b = candles([[100, 104, 100, 104], [104, 108, 104, 108], [108, 108.5, 106.5, 107], [107, 107.5, 105.5, 106], [106, 106.5, 104.5, 105], [105, 105.5, 103.5, 104]]);
+  const titles = function (bars, o) { return Array.from(QT.Patterns.detect(bars, I.set(bars), 60, o)).filter(function (e) { return e.kind === 'candle'; }).map(function (e) { return e.title + '@' + (bars.length - 1 - e.i); }); };
+  assert.deepStrictEqual(titles(b), ['음봉 4연속 (흑삼병)@0', '장대양봉@4']);                               // 최근 5봉 · 3연속이던 전날은 남기지 않는다
+  assert.deepStrictEqual(titles(b, { open:true }), ['음봉 3연속 (흑삼병)@1', '장대양봉@4']);
+  const ev = Array.from(QT.Patterns.detect(b, I.set(b), 60)).filter(function (e) { return e.kind === 'candle' && e.dir < 0; })[0];
+  assert.deepStrictEqual([ev.weight, ev.dir], [2, -1]);                                                    // 세기 0.8 이상은 차트 마커로도 표시
+});
 console.log(process.exitCode ? '계산 검증 실패' : '계산 검증 통과 (' + passed + '개 항목)');
 if (!REPORT || process.exitCode) return;
 
@@ -299,18 +436,24 @@ console.log('\n신뢰도 리포트 — ' + uni.length + '종목 (' + (KRX ? '공
     for (let i = 200; i < n - H; i++){
       const r = (b[i + H].c - b[i].c) / b[i].c * 100, k = u.cur + b[i].t;
       (byDay[k] = byDay[k] || []).push(r);
-      rows.push({ k:k, r:r, c:QT.Scoring.classOf(QT.Scoring.at(b, x, i).score) });
+      const sc = QT.Scoring.at(b, x, i);
+      rows.push({ k:k, r:r, c:QT.Scoring.classOf(sc.score), c0:QT.Scoring.classOf(sc.base) });
     }
   });
   const avg = {}; Object.keys(byDay).forEach(function (k) { avg[k] = mean(byDay[k]); });
+  function table(key){
+    [2, 1, 0, -1, -2].forEach(function (c) {
+      const a = rows.filter(function (x) { return x[key] === c; });
+      if (!a.length) return;
+      console.log('   ' + (QT.Scoring.verdictOf([-70, -30, 0, 30, 70][c + 2]) + '      ').slice(0, 6) + ' n=' + String(a.length).padStart(6) +
+        '  평균 ' + mean(a.map(function (x) { return x.r; })).toFixed(2).padStart(6) + '%  상승 ' + pc(a.filter(function (x) { return x.r > 0; }).length / a.length) +
+        '  같은 날 종목 평균 대비 ' + mean(a.map(function (x) { return x.r - avg[x.k]; })).toFixed(2) + '%p');
+    });
+  }
   console.log('① 종합 점수 등급별 ' + H + '거래일 뒤 수익률 (종목 자체 점수 — 시장 반영 전)');
-  [2, 1, 0, -1, -2].forEach(function (c) {
-    const a = rows.filter(function (x) { return x.c === c; });
-    if (!a.length) return;
-    console.log('   ' + (QT.Scoring.verdictOf([-70, -30, 0, 30, 70][c + 2]) + '      ').slice(0, 6) + ' n=' + String(a.length).padStart(6) +
-      '  평균 ' + mean(a.map(function (x) { return x.r; })).toFixed(2).padStart(6) + '%  상승 ' + pc(a.filter(function (x) { return x.r > 0; }).length / a.length) +
-      '  같은 날 종목 평균 대비 ' + mean(a.map(function (x) { return x.r - avg[x.k]; })).toFixed(2) + '%p');
-  });
+  table('c');
+  console.log('   (비교) 캔들 · 추세추종 신호를 더하기 전 — 지표 점수만으로 매긴 등급');
+  table('c0');
   console.log('   → 등급이 높을수록 초과수익이 커야 예측력이 있는 것. 차이가 작거나 뒤집혀 있으면 등급은 "현재 추세 상태"로만 읽어야 합니다.\n');
 })();
 
@@ -398,4 +541,51 @@ console.log('\n신뢰도 리포트 — ' + uni.length + '종목 (' + (KRX ? '공
   });
   console.log('   → 손절선이 익절선보다 가까워(2 대 3) 추세가 없다면 손절 60% · 익절 40% 로 닿는 것이 기대값입니다. 평균 손익이 그냥 보유보다 높지 않다면\n' +
     '     이 규칙은 수익을 늘리는 장치가 아니라 한 번의 손실 · 이익 폭을 미리 정해 두는 장치입니다. 상승장 구간의 수치라 다른 장세에서는 달라집니다.');
+})();
+
+/* 캔들 · 추세추종 신호 뒤의 수익률 — 신호 가감(scoring.js SIGNAL · candles.js)의 방향과 크기를 정한 근거.
+   같은 날 여러 종목에서 나온 신호는 한 표본으로 묶고(시장이 함께 움직이므로), 기간이 겹치는 만큼 √일수 로 나눠 t 를 보수적으로 잡는다 */
+(function () {
+  const HS = [1, 5, 10], S = QT.Scoring, byDay = {}, g = {}, order = [];
+  let all = 0, moved = 0, flip = 0;
+  function add(name, k, rs){ if (!g[name]){ g[name] = []; order.push(name); } g[name].push({ k:k, r:rs }); }
+  function sd(a){ const m = mean(a); return Math.sqrt(a.reduce(function (q, v) { return q + (v - m) * (v - m); }, 0) / Math.max(1, a.length - 1)); }
+  uni.forEach(function (u) {
+    const b = u.bars, n = b.length, x = I.set(b);
+    for (let i = 200; i < n - HS[2]; i++){
+      const k = u.cur + b[i].t, rs = HS.map(function (h) { return (b[i + h].c / b[i].c - 1) * 100; });
+      (byDay[k] = byDay[k] || []).push(rs);
+      const sc = S.at(b, x, i), sg = sc.signals;
+      all++; if (sg.pts){ moved++; if (S.classOf(sc.own) !== S.classOf(sc.base)) flip++; }
+      QT.Candles.read(b, x, i).forEach(function (c) {
+        /* 연속 봉은 자리(20일선 위 · 아래)에 따라 세기가 다르다 — 세기 0.6 이상이 '흐름이 바뀌는 자리' */
+        const name = c.key !== 'run' ? c.title : (c.dir < 0 ? '음봉' : '양봉') + ' 3연속 이상 · 20일선 ' + ((c.v >= 0.6) === (c.dir < 0) ? '위' : '아래');
+        add('캔들     ' + name, k, rs);
+      });
+      sg.follow.list.forEach(function (f) { if (f.ago === 0) add('추세추종 ' + f.title + ' 당일', k, rs); });
+      const reg = sc.regime === 'trend' ? '추세장(ADX 25↑)' : sc.regime === 'range' ? '횡보장(ADX 20↓)' : null;
+      sg.follow.list.forEach(function (f) { if (f.key === 'cross' && reg) add('추세추종 ' + f.title + ' 20봉 안 · ' + reg, k, rs); });
+      [['캔들 가감', sg.candle.pts, 5], ['추세추종 가감', sg.follow.pts, 5], ['가감 합계', sg.pts, 8]].forEach(function (z) {
+        if (Math.abs(z[1]) >= z[2]) add('점수     ' + z[0] + (z[1] > 0 ? ' +' : ' −') + z[2] + '점 ' + (z[1] > 0 ? '이상' : '이하'), k, rs);
+      });
+    }
+  });
+  const avg = {};
+  Object.keys(byDay).forEach(function (k) { avg[k] = HS.map(function (_, h) { return mean(byDay[k].map(function (r) { return r[h]; })); }); });
+  const width = function (t) { return t.replace(/[^\x00-\xff]/g, 'xx').length; };
+  console.log('\n⑥ 캔들 · 추세추종 신호 뒤의 수익률 — 같은 날 종목 평균 대비 (%p), 괄호는 t (|t| 2 미만이면 우연과 구분되지 않음)');
+  console.log('   신호 가감이 0 이 아닌 날 ' + pc(moved / all) + ' · 그 때문에 등급이 바뀐 날 ' + pc(flip / all) + ' (전체 ' + all + '봉)');
+  console.log('   ' + ' '.repeat(54) + '      n   ' + HS.map(function (h) { const t = h + '거래일 뒤'; return ' '.repeat(15 - width(t)) + t; }).join('  '));
+  order.sort().forEach(function (name) {
+    const a = g[name];
+    console.log('   ' + name + ' '.repeat(Math.max(1, 54 - width(name))) + String(a.length).padStart(7) + '   ' + HS.map(function (h, hi) {
+      const d = {}; a.forEach(function (q) { (d[q.k] = d[q.k] || []).push(q.r[hi] - avg[q.k][hi]); });
+      const dm = Object.keys(d).map(function (k) { return mean(d[k]); }), ex = mean(a.map(function (q) { return q.r[hi] - avg[q.k][hi]; }));
+      const t = dm.length > 2 ? mean(dm) / (sd(dm) / Math.sqrt(dm.length)) / Math.sqrt(h) : NaN;
+      return ((ex >= 0 ? '+' : '') + ex.toFixed(2)).padStart(7) + (' (' + (isFinite(t) ? t.toFixed(1) : '—') + ')').padStart(8);
+    }).join('  '));
+  });
+  console.log('   → 신호의 방향(음봉 연속 · 위꼬리 · 데드크로스 = 감점, 그 반대 = 가점)은 통상적인 해석을 따른 것입니다. 위 표에서 |t| 가 2 를 넘지 못하면\n' +
+    '     그 신호가 수익률을 가른다는 증거는 없다는 뜻이라, 가감 폭을 그룹별 ±' + S.SIGNAL.candle + '점(등급 한 칸 37점의 4분의 1 남짓)으로 묶어 둡니다.\n' +
+    '     표가 20개가 넘어 우연히 |t| 2 를 넘는 줄이 한둘 나올 수 있습니다 — 한 줄만 보고 판단하지 마세요.');
 })();

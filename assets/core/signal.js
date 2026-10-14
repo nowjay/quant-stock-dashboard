@@ -6,6 +6,8 @@
      · RSI(14)        : 구간 점수 + 5일 전보다 상승하면 가점 (과매도 반등 · 55~70 상승 모멘텀 우대)
      · MACD 시그널    : 시그널선 위 10 · 히스토그램 증가 5 · 0선 위 5 · 최근 10봉 내 골든크로스 5
      · 피봇 저항 돌파 : 전일 기준 피봇 R2 이상 25 · R1 이상 21 · P 이상 14 · S1 이상 7 · 그 아래 2
+     · 신호 가감 (−10~+10) : 캔들(연속 봉 · 꼬리 · 장악형 · 장대봉) · 추세추종(이평선 크로스 · 20일 채널 돌파) —
+                             종합 의견(scoring.js signals)과 같은 신호. 그쪽은 −100~+100 척도라 여기서는 절반을 더한다
    재무 점수 (0~100) — fundamentals.js (PER · PBR 업종 대비 · ROE · 영업이익 YoY − 재무 위험 감점)
    종합 = 0.5 × 기술 + 0.5 × 재무
      80↑ 강력 매수 · 65~79 매수 · 45~64 중립 · 30~44 매도 · 30 미만 강력 매도
@@ -45,9 +47,10 @@ window.QT = window.QT || {};
   /**
    * 일봉 · 지표 세트로 기술 점수 계산
    * @param mkt  소속 지수의 상태 (Scoring.marketAt 결과 · Analysis.core 의 market). 급락이면 점수를 MARKET_CAP 으로 제한
-   * @returns {score, raw, marketCut, market, parts, …}  raw = 항목 합계, marketCut = 시장 급락으로 깎인 점수
+   * @param opts.open  마지막 일봉이 진행 중 — 캔들 · 채널 돌파 신호는 끝난 봉까지만 본다
+   * @returns {score, raw, adj, marketCut, market, parts, …}  raw = 항목 합계 + 신호 가감(0~100), marketCut = 시장 급락으로 깎인 점수
    */
-  function tech(bars, ind, mkt){
+  function tech(bars, ind, mkt, opts){
     const n = bars.length;
     if (n < 60 || !ind) return null;
     const i = n - 1, p = bars[i].c, tags = [];
@@ -118,10 +121,20 @@ window.QT = window.QT || {};
       { key:'macd', name:'MACD 시그널', pts:macdPts, max:25, note:macdNote },
       { key:'pivot', name:'피봇 저항선', pts:pivPts, max:25, note:pivNote }
     ];
-    const raw = parts.reduce(function (a, x) { return a + x.pts; }, 0), risk = !!(mkt && mkt.risk);
+    /* ⑤ 캔들 · 추세추종 신호 가감 */
+    const sg = QT.Scoring.signals(bars, ind, i, opts), half = (sg.candle.pts + sg.follow.pts) / 2;
+    const sigs = sg.candle.list.concat(sg.follow.list);
+    const adj = { pts:Math.sign(half) * Math.round(Math.abs(half)) || 0, candle:sg.candle, follow:sg.follow,
+      note:sigs.map(function (x) { return x.title + (x.ago ? ' ' + x.ago + '봉 전' : ''); }).join(' · ') };
+    sg.candle.list.forEach(function (x) {
+      if (x.tag && !tags.some(function (t) { return t.text === x.tag; })) tag(x.tag, 6, x.dir > 0 ? 'good' : 'bad');
+    });
+
+    const sum = parts.reduce(function (a, x) { return a + x.pts; }, 0), raw = clamp(sum + adj.pts, 0, 100), risk = !!(mkt && mkt.risk);
+    adj.pts = raw - sum;                                 // 0~100 을 넘겨 잘린 만큼은 가감에서 뺀다 (항목 합계 + 가감 = raw)
     if (risk) tag('#시장급락', 10, 'bad');
     const score = risk ? Math.min(raw, MARKET_CAP) : raw;
-    return { score:score, raw:raw, marketCut:raw - score, market:mkt || null, parts:parts, pivot:piv,
+    return { score:score, raw:raw, adj:adj, marketCut:raw - score, market:mkt || null, parts:parts, pivot:piv,
              tags:tags.sort(function (a, b) { return b.w - a.w; }), rsi:r };
   }
 
@@ -163,7 +176,7 @@ window.QT = window.QT || {};
     if (real && d && d.length >= 60 && ql.level !== 'low'){
       try {
         const core = QT.Analysis.core(d, st.cur, { open:open, market:mk });
-        t = tech(d, core.ind, core.market);
+        t = tech(d, core.ind, core.market, { open:open });
         const T = QT.Targets && QT.Targets.build(d, core, st);
         if (T && T.mid && T.mid.base) tgt = { v:T.mid.base.v, pct:T.mid.base.pct };
       } catch (e) { console.warn('[QT] 스크리너 기술 분석 실패', code, e); }
