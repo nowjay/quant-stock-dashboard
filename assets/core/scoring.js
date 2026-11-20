@@ -74,9 +74,13 @@ window.QT = window.QT || {};
     if (k < 1 || !(h[k - 1][1] > 0)) return null;
     /* 스냅샷 일봉이 하루 비어 있어도 당일 등락은 맞도록, 지금 시세에 딸린 등락률이 있으면 그 값을 쓴다 */
     const d1 = now && fin(mk.r) && mk.day === h[k][0] ? mk.r : pct(h[k][1], h[k - 1][1]);
+    const historyGap = dayGap(h[k - 1][0], h[k][0]) > MARKET.stale;
     const d3 = k >= 3 && h[k - 3][1] > 0 ? pct(h[k][1], h[k - 3][1]) : null;
     const byDay = d1 <= MARKET.day, by3 = d3 != null && d3 <= MARKET.d3;
-    return { key:mk.key, name:mk.name, day:h[k][0], d1:d1, d3:d3, risk:byDay || by3, by: byDay && by3 ? 'both' : byDay ? 'day' : by3 ? 'd3' : null };
+    const r20 = k >= 20 && h[k - 20][1] > 0 ? pct(h[k][1], h[k - 20][1]) : null;
+    const average = function (end, count) { return h.slice(end - count + 1, end + 1).reduce(function (sum, row) { return sum + row[1]; }, 0) / count; };
+    const downtrend = (r20 != null && r20 <= -5) || (k >= 64 && h[k][1] < average(k, 60) && average(k, 20) < average(k - 5, 20));
+    return { key:mk.key, name:mk.name, day:h[k][0], timestamp:mk.timestamp || null, historyGap:historyGap, r20:r20, downtrend:downtrend, d1:d1, d3:d3, risk:byDay || by3, by: byDay && by3 ? 'both' : byDay ? 'day' : by3 ? 'd3' : null };
   }
 
   /** 과매수/과매도 오실레이터: 추세장에서는 방향 확인, 횡보장에서는 되돌림 신호 */

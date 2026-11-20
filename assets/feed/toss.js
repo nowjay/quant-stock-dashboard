@@ -201,7 +201,7 @@ window.QT = window.QT || {};
       code: parts.slice(2).join(':'),
       price: price,
       volume: Number(f.data.volume) || 0,
-      ts: Date.parse(f.data.timestamp) || Date.now()
+      ts: Date.parse(f.data.timestamp)
     };
   };
 
@@ -247,7 +247,7 @@ window.QT = window.QT || {};
           const price = Number(row.lastPrice);
           if (!row.symbol || !isFinite(price) || price <= 0) return;
           got++;
-          self._tick({ code:row.symbol, price:price, volume:0, ts:Date.parse(row.timestamp) || Date.now() });
+          self._tick({ code:row.symbol, price:price, volume:0, ts:Date.parse(row.timestamp) });
         });
         return got;
       });

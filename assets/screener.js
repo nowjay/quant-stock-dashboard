@@ -108,7 +108,7 @@ window.QT = window.QT || {};
     const min = cfg.grade === 'sbuy' ? 80 : 65;
     const scored = evs.map(function (ev) { return { ev:ev, sc:scoreOf(ev) }; });
     const valid = scored.filter(function (x) { return fin(x.sc); });
-    const hits = valid.filter(function (x) { return x.sc >= min; }).sort(function (a, b) { return b.sc - a.sc || (b.ev.combo.total || 0) - (a.ev.combo.total || 0); });
+    const hits = valid.filter(function (x) { return x.sc >= min && x.ev.entry.allowed; }).sort(function (a, b) { return b.sc - a.sc || (b.ev.combo.total || 0) - (a.ev.combo.total || 0); });
     const skipped = total - valid.length;
     const why = cfg.basis === 'tech' ? '실제 일봉이 없는' : cfg.basis === 'fund' ? '재무 데이터가 없는' : '일봉 또는 재무 데이터가 없는';
     /* 시장 급락으로 강력 매수에서 내려온 종목 — 강력 매수 목록이 비거나 줄어든 이유 */
@@ -118,7 +118,8 @@ window.QT = window.QT || {};
       if (hit){ const m = marketNow(ev.st) || ev.tech.market; idx[m.key] = m.name + ' ' + pct1(m.d1); }
       return hit;
     }).length;
-    const head = (fetching ? '<div class="scr-skip">공공데이터 일봉 ' + fetching + '종목을 받는 중 — 받는 대로 다시 평가합니다.</div>' : '') +
+    const blocked = valid.filter(function (x) { return !x.ev.entry.allowed; }).length;
+    const head = (blocked ? '<div class="scr-skip">시장·시세 상태로 신규 매수 보류 ' + blocked + '종목</div>' : '') + (fetching ? '<div class="scr-skip">공공데이터 일봉 ' + fetching + '종목을 받는 중 — 받는 대로 다시 평가합니다.</div>' : '') +
       '<div class="scr-head"><b>' + BASIS[cfg.basis] + ' 기준 · ' + (cfg.grade === 'sbuy' ? '강력 매수' : '매수 이상') + '</b>' +
       '<span><em class="num">' + hits.length + '</em>종목 / 분석 ' + valid.length + '종목</span></div>' +
       (skipped ? '<div class="scr-skip">' + why + ' ' + skipped + '종목은 제외했습니다.</div>' : '') +

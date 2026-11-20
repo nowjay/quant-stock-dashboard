@@ -31,7 +31,7 @@ const N = +(args[args.indexOf('--n') + 1]) > 0 && args.indexOf('--n') >= 0 ? +ar
 const win = { QT:{} };
 const ctx = vm.createContext({ window:win, console:console, Intl:Intl, Date:Date, Math:Math, isFinite:isFinite,
   fetch:function () { return Promise.reject(new Error('fetch 없음')); } });
-['market-data', 'indicators', 'candles', 'scoring', 'position', 'patterns', 'targets', 'analysis', 'backtest', 'signal'].forEach(function (m) {
+['market-data', 'indicators', 'candles', 'scoring', 'position', 'patterns', 'targets', 'analysis', 'backtest', 'signal', 'fundamentals'].forEach(function (m) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'assets/core', m + '.js'), 'utf8'), ctx, { filename:m + '.js' });
 });
 const QT = win.QT, I = QT.Indicators, M = QT.Market;
@@ -257,32 +257,80 @@ check('시장 반영 — 신호 신뢰도 백테스트도 같은 등급 기준',
   assert.strictEqual(s.byClass['1'].n, plain.byClass['1'].n + plain.byClass['2'].n);
   assert.deepStrictEqual(QT.Backtest.signals(sample, ind, 10, { market:fakeIndex([]) }).byClass['2'].n, plain.byClass['2'].n);
 });
-check('평단가 기준 포지션 판단 — 손절선 · 익절선 · 추가 매수 조건', function () {
-  const P = QT.Position, calm = { risk:false }, crash = { risk:true };
-  const J = function (price, o) { return P.judge(Object.assign({ avg:10000, price:price, atr:500, score:40, market:calm }, o)); };
-  const j = J(10000);
-  assert.deepStrictEqual([j.stop.v, j.take.v, j.rule.stop, j.rule.take, j.pnl, j.pnlAtr], [9000, 11500, 2, 3, 0, 0]);       // 평단 − 2 ATR · + 3 ATR
-  assert.ok(Math.abs(j.stop.pctAvg + 10) < 1e-9 && Math.abs(j.take.pctAvg - 15) < 1e-9 && Math.abs(j.avgPos - 0.4) < 1e-9 && Math.abs(j.pos - 0.4) < 1e-9);
-  /* 선에 닿으면(같아도) 매도 */
-  assert.deepStrictEqual([J(9000).action, J(9001).action === 'cut', J(8000).action, J(11500).action, J(11499).action === 'take', J(15000).action], ['cut', false, 'cut', 'take', false, 'take']);
-  assert.deepStrictEqual([J(9000).label, J(11500).label, J(10000).label, J(11000).label], ['매도 · 손절', '매도 · 익절', '추가 매수 가능', '보유']);
-  /* 추가 매수: 추세(매수 이상) · 시장 급락 아님 · 남은 폭(익절 ≥ 손절) 을 모두 만족할 때만 */
-  const ok = function (x) { return Array.from(x.conds, function (c) { return c.ok; }); };       // vm 안의 배열은 프로토타입이 달라 옮겨서 비교
-  assert.deepStrictEqual([J(10250).action, ok(J(10250))], ['add', [true, true, true]]);                                     // 익절까지 1250 = 손절까지 1250
-  assert.deepStrictEqual([J(10251).action, ok(J(10251))], ['hold', [true, true, false]]);
-  assert.deepStrictEqual([J(9500, { score:17 }).action, ok(J(9500, { score:17 })), J(9500, { score:18 }).action], ['hold', [false, true, true], 'add']);
-  assert.deepStrictEqual([J(9500, { market:crash }).action, ok(J(9500, { market:crash })), J(9500, { market:null }).action], ['hold', [true, false, true], 'add']);
-  assert.strictEqual(J(8900, { score:90 }).action, 'cut');                                                                  // 등급이 좋아도 손절선 아래면 손절
-  /* 선까지 0.5 ATR 이내면 근접 */
-  assert.deepStrictEqual([J(9250).near, J(9251).near, J(11250).near, J(11249).near, J(9000).near], ['stop', null, 'take', null, null]);
-  /* 배수 조정 (0.5 단위 · 0.5~10) · 수량 */
-  const w = J(10000, { rule:{ stop:1.5, take:6 }, qty:10 });
-  assert.deepStrictEqual([w.stop.v, w.take.v, w.amount, J(10700, { qty:10 }).amount, J(10000).amount], [9250, 13000, 0, 7000, null]);
-  assert.deepStrictEqual([P.mult(0.2, 2), P.mult(99, 2), P.mult(2.3, 2), P.mult(0, 2), P.mult(NaN, 3), P.mult(-1, 3)], [0.5, 10, 2.5, 2, 3, 3]);
-  assert.deepStrictEqual([P.judge({ avg:0, price:100, atr:5 }), P.judge({ avg:100, price:100, atr:0 }), P.judge({ avg:100, price:null, atr:5 }), P.judge(null)], [null, null, null, null]);
-  /* 실제 일봉: 분석 결과를 그대로 넣어도 같은 규칙 */
-  const a = QT.Analysis.core(sample, 'KRW'), r = P.judge({ avg:a.price, price:a.price, atr:a.atr, score:a.score, market:a.market });
-  assert.ok(Math.abs(r.stop.v - (a.price - 2 * a.atr)) < 1e-6 && Math.abs(r.take.v - (a.price + 3 * a.atr)) < 1e-6 && (r.action === 'add') === (a.score >= 18));
+check('포지션 보호선 고정 · 최초 이탈 유지 · 손실 예산', function () {
+  const P = QT.Position, item = { avg:100000, qty:10 }, now = Date.now();
+  assert.ok(P.protect(item, 3000, { stop:2, take:3 }, now));
+  assert.strictEqual(P.protect(item, 5000, null, now), false);
+  assert.strictEqual(item.protection.stop, 94000);
+  const input = { avg:item.avg, qty:item.qty, price:100000, atr:5000, score:30, market:{ risk:false }, protection:item.protection, entry:{ allowed:true }, riskBudget:120000, cash:500000 };
+  let j = P.judge(input);
+  assert.strictEqual(j.action, 'add'); assert.strictEqual(j.addQty, 5);
+  assert.strictEqual(P.judge(Object.assign({}, input, { cash:null })).action, 'hold');
+  assert.strictEqual(P.judge(Object.assign({}, input, { market:null })).action, 'hold');
+  assert.strictEqual(P.judge(Object.assign({}, input, { market:{ risk:false, downtrend:true } })).action, 'hold');
+  assert.strictEqual(P.observe(item, { price:93500, ts:now - 1 }), false);
+  assert.ok(P.observe(item, { price:93500, ts:now + 1 }));
+  assert.strictEqual(P.observe(item, { price:95000, ts:now + 301 }), false);
+  assert.strictEqual(P.judge(Object.assign({}, input, { price:95000 })).action, 'cut');
+  assert.strictEqual(P.judge({ avg:100, price:100, atr:100 }), null);
+});
+check('실시간 늦은 체결 · 중복 불확실성 · 데이터 재조회', function () {
+  const code = 'VERIFY', now = Date.now();
+  M.BY_CODE[code] = { code:code, cur:'KRW', type:'stock' };
+  const rows = sample.map(function (b) { return Object.assign({}, b); });
+  rows[rows.length - 1].t = now - 86400000;
+  M.setDaily(code, rows, 'toss');
+  assert.strictEqual(M.applyTick(code, 93000, 10, now, true), true);
+  assert.strictEqual(M.applyTick(code, 96500, 5, now - 1000, true), false);
+  assert.strictEqual(M.daily(code)[M.daily(code).length - 1].c, 93000);
+  assert.strictEqual(M.applyTick(code, 93000, 10, now, true), false);
+  assert.ok(M.liveState(code).uncertain);
+  M.setDaily(code, M.daily(code), 'toss');
+  assert.strictEqual(M.liveState(code).uncertain, false);
+  assert.strictEqual(M.applyTick(code, Infinity, 1, now + 1, true), false);
+  assert.strictEqual(M.applyTick(code, 100, 1, NaN, true), false);
+});
+check('지속 하락 · 지수 미확인 · 실시간 지연 시 신규 매수 보류', function () {
+  const now = Date.now(), code = 'VERIFY', st = M.BY_CODE[code];
+  const h = [];
+  for (let j = 0; j < 80; j++) h.push([QT.Scoring.dayOf(now - (79 - j) * 86400000), 100 * Math.pow(0.994, j)]);
+  const market = QT.Scoring.marketAt({ key:'TEST', h:h, timestamp:now }, QT.Scoring.dayOf(now), false);
+  assert.strictEqual(market.risk, false); assert.strictEqual(market.downtrend, true);
+  QT.Feed = { getConfig:function () { return { provider:'toss' }; }, status:{ mode:'live' } };
+  M.applyTick(code, 94000, 1, now + 1, true);
+  const calm = Object.assign({}, market, { downtrend:false });
+  assert.ok(QT.Signal.entry(st, M.daily(code), calm, now).allowed);
+  assert.strictEqual(QT.Signal.entry(st, M.daily(code), null, now).allowed, false);
+  assert.strictEqual(QT.Signal.entry(st, M.daily(code), market, now).allowed, false);
+  assert.strictEqual(QT.Signal.entry(st, M.daily(code), calm, now + 31000).allowed, false);
+  assert.strictEqual(QT.Signal.entry(st, M.daily(code), Object.assign({}, calm, { timestamp:now - 121000 }), now).allowed, false);
+  delete QT.Feed;
+});
+check('재무 누락은 점수 보류 · 실제 적자는 유효한 관측', function () {
+  QT.Fund.load({ items:{ EMPTY:{ cur:'KRW' }, LOSS:{ cur:'KRW', ttm:{ eps:-1, bps:10 }, annual:{ p:['2024', '2025'], e:[0, 0], op:[-1, -2], rev:[10, 10], ni:[-1, -2] } } } });
+  const missing = QT.Fund.analyze('EMPTY', 100);
+  assert.strictEqual(missing.score, null); assert.strictEqual(missing.scoring.coverage, 0);
+  assert.ok(missing.scoring.parts[0].note.includes('자료 없음'));
+  assert.strictEqual(QT.Signal.combine({ score:80, raw:80 }, missing).total, null);
+  assert.ok(Number.isFinite(QT.Fund.analyze('LOSS', 100).score));
+});
+check('늦은 봉 응답이 최신 체결을 되돌리지 않음', function () {
+  const code = 'VERIFY', now = Date.now();
+  M.applyTick(code, 90000, 2, now + 10000, true);
+  const snapshot = M.daily(code).map(function (b) { return Object.assign({}, b); });
+  snapshot[snapshot.length - 1].c = 98000;
+  M.setDaily(code, snapshot, 'toss', now - 1000);
+  assert.strictEqual(M.daily(code)[M.daily(code).length - 1].c, 90000);
+  assert.ok(M.liveState(code).uncertain);
+});
+check('재무 누락 상태의 가치분석 화면 렌더링', function () {
+  const source = fs.readFileSync(path.join(ROOT, 'assets/value.js'), 'utf8')
+    .replace('QT.Value = { init:init,', 'QT.Value = { summaryCard:summaryCard, signalCard:signalCard, init:init,');
+  vm.runInContext(source, ctx, { filename:'value.js' });
+  const st = M.BY_CODE.VERIFY, f = QT.Fund.analyze('EMPTY', 100);
+  const combo = QT.Signal.combine(null, f);
+  assert.ok(QT.Value.summaryCard(st, f, null, combo).includes('보류'));
+  assert.ok(QT.Value.signalCard(st, null, f, null).includes('재무 필수 항목 0/4'));
 });
 /* 캔들 검증용 일봉: 시가 = 종가 100 · 고저 ±1 인 봉 40개(ATR 2 · 20일선 100) 뒤에 rows([시, 고, 저, 종]) 를 붙인다 */
 function candles(rows){

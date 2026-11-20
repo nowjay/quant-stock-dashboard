@@ -156,7 +156,9 @@ window.QT = window.QT || {};
     let idle = 0, tail = 0;
     for (let i = n - w; i < n; i++) if (!(bars[i].v > 0)) idle++;
     for (let i = n - 1; i >= 0 && !(bars[i].v > 0); i--) tail++;
-    const hasVol = bars.some(function (b) { return b.v > 0; });           // 지수처럼 거래량이 없는 시계열은 제외
+    const hasVol = bars.some(function (b) { return b.v > 0; });
+    if (!hasVol && opts && opts.stock) note('low', '주식 거래량이 전부 누락되어 판단을 보류합니다.');
+    if (opts && opts.now && n && opts.now - bars[n - 1].t > 5 * 86400000) note('low', '일봉이 5일 이상 지연되어 판단을 보류합니다.');           // 지수처럼 거래량이 없는 시계열은 제외
     if (hasVol && tail >= 3) note('low', '최근 ' + tail + '거래일 연속 거래가 없습니다(거래정지 추정) — 지표가 멈춰 있어 현재 상태를 반영하지 못합니다.');
     else if (hasVol && idle >= 5) note('low', '최근 ' + w + '거래일 중 ' + idle + '일은 거래가 없었습니다 — 유동성이 부족해 지표 · 캔들 패턴이 성립하지 않습니다.');
     else if (hasVol && idle >= 2) note('mid', '최근 ' + w + '거래일 중 ' + idle + '일은 거래가 없었습니다 — 지표가 왜곡될 수 있습니다.');
@@ -185,7 +187,7 @@ window.QT = window.QT || {};
     const db = sameBars ? bars : daily;
     a.daily = d;                                          // 일봉 기준 분석 (신호 · 체크리스트 · 백테스트)
     a.forecast = { shortDir:d.shortDir, midDir:d.midDir, shortText:d.shortText, midText:d.midText };
-    a.quality = quality(db, { real:o.real });
+    a.quality = quality(db, { real:o.real, now:o.now, stock:st && st.type !== 'index' });
     /* 믿기 어려운 데이터로는 목표가를 내지 않는다. 가상의 경로에서 나온 크로스 · 돌파도 신호가 아니다 */
     a.events = QT.Patterns && o.real !== false ? QT.Patterns.detect(db, d.ind, 60, { open:d.open }) : [];
     a.targets = QT.Targets && a.quality.level !== 'low' ? QT.Targets.build(db, d, st) : null;

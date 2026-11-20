@@ -68,9 +68,9 @@ window.QT = window.QT || {};
 
   /* live: 증권사 실제 체결(거래일 인식) · false: 모의 시세 */
   MarketFeed.prototype._onTick = function (t, live){
+    if (QT.Market.applyTick(t.code, t.price, t.volume, t.ts, !!live) === false) return;
     this.lastTickAt = Date.now();
     this.tickCount++;
-    QT.Market.applyTick(t.code, t.price, t.volume, t.ts || Date.now(), !!live);
     this.emit('tick', t);
   };
 

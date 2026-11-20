@@ -43,6 +43,8 @@ window.QT = window.QT || {};
   const BY_CODE = {};
   const QUOTES = {};
   const REAL_BARS = {};
+  const LIVE_STATE = {};
+  const REVISIONS = {};
   const REAL_SRC = {};                 // 실제 일봉 출처: 'krx'(공공데이터) | 'krx+toss' | 'bundle'(history.json) | 'toss'
   let META = { symbols:null, quotes:null, history:null, source:'seed' };
 
@@ -256,7 +258,17 @@ window.QT = window.QT || {};
            (공공데이터는 전 영업일까지만 있어서 오늘 체결을 어제 봉에 덮어쓰면 안 됨)
      모의 시세는 예전처럼 마지막 봉만 움직인다. */
   function applyTick(code, price, volDelta, ts, live){
-    const st = BY_CODE[code]; if (!st) return;
+    const st = BY_CODE[code]; if (!st || !Number.isFinite(price) || price <= 0) return false;
+    const previous = LIVE_STATE[code], loaded = DAILY[code];
+    if (live && loaded && loaded.length && Number.isFinite(ts) && marketDay(ts, st.cur === 'USD') < barDay(loaded[loaded.length - 1].t)) return false;
+    if (live && (!Number.isFinite(ts) || (previous && previous.ts > ts))) return false;
+    if (live && previous && previous.ts === ts && previous.price === price && previous.volume === volDelta) {
+      previous.uncertain = true;
+      return false; // 동일 체결인지 판별 불가. 봉 재조회까지 신규 매수 보류.
+    }
+    LIVE_STATE[code] = { ts:ts, receivedAt:Date.now(), price:price, volume:volDelta,
+      mode:live ? (volDelta > 0 ? 'trade' : 'quote') : 'mock', uncertain:!!(previous && (previous.uncertain || (previous.mode === 'quote' && volDelta > 0))) };
+    REVISIONS[code] = (REVISIONS[code] || 0) + 1;
     if (needsDaily(code)){                             // 공공데이터 일봉을 받기 전 — 시세만 (대비는 공공데이터 종가 기준)
       const it = KRX.items[code], q = QUOTES[code];
       if (q && it && it.p){ q.p = price; q.d = price - it.p; q.r = (price - it.p) / it.p * 100; }
@@ -293,13 +305,29 @@ window.QT = window.QT || {};
       }
     }
     dropDerived(code);
+    return true;
+  }
+
+  function mergeSnapshot(code, rows, startedAt){
+    const live = LIVE_STATE[code];
+    if (!startedAt || !live || live.mode === 'mock' || live.receivedAt <= startedAt || !rows.length) return rows;
+    const current = daily(code), last = current[current.length - 1], snapshot = rows[rows.length - 1];
+    if (last && last.t >= snapshot[0]) {
+      if (last.t > snapshot[0]) rows.push([last.t, last.o, last.h, last.l, last.c, last.v]);
+      else { snapshot[2] = Math.max(snapshot[2], last.h); snapshot[3] = Math.min(snapshot[3], last.l); snapshot[4] = last.c; snapshot[5] = Math.max(snapshot[5], last.v); }
+      live.uncertain = true; // 응답 도중 체결이 있었으므로 거래량 완전성은 다음 조회로 확인한다.
+    }
+    return rows;
   }
 
   /* 증권사 API 에서 받은 실제 일봉으로 교체 — [{t,o,h,l,c,v}] 오래된 순 */
-  function setDaily(code, bars, source){
+  function setDaily(code, bars, source, startedAt){
     if (!BY_CODE[code] || !bars || !bars.length) return false;
     REAL_BARS[code] = bars.map(function (b) { return [b.t, b.o, b.h, b.l, b.c, b.v]; });
+    if (LIVE_STATE[code]) LIVE_STATE[code].uncertain = false;
+    REAL_BARS[code] = mergeSnapshot(code, REAL_BARS[code], startedAt);
     REAL_SRC[code] = source || 'api';
+    REVISIONS[code] = (REVISIONS[code] || 0) + 1;
     resetDaily(code);
     quoteFromBars(code, REAL_BARS[code]);
     return true;
@@ -344,14 +372,17 @@ window.QT = window.QT || {};
     return Promise.all(workers).then(function () { return todo.length; });
   }
   /** 공공데이터 일봉 뒤에 증권사 일봉을 잇는다 — 공공데이터 마지막 거래일 이후 봉만 사용 */
-  function appendDaily(code, bars, source){
+  function appendDaily(code, bars, source, startedAt){
     const base = REAL_BARS[code], lastT = KRX.lastT[code];
     if (!KRX.loaded[code] || !base || !lastT || !bars) return false;
     const keep = base.filter(function (r) { return r[0] <= lastT; });
     const add = bars.filter(function (b) { return b.t > lastT && b.c > 0; })
       .map(function (b) { return [b.t, b.o, b.h, b.l, b.c, b.v]; });
-    REAL_BARS[code] = keep.concat(add);
+    if (LIVE_STATE[code]) LIVE_STATE[code].uncertain = false;
+    const merged = mergeSnapshot(code, keep.concat(add), startedAt);
+    REAL_BARS[code] = merged;
     REAL_SRC[code] = add.length ? 'krx+' + (source || 'api') : 'krx';
+    REVISIONS[code] = (REVISIONS[code] || 0) + 1;
     resetDaily(code);
     if (add.length) quoteFromBars(code, REAL_BARS[code]);
     return true;
@@ -478,6 +509,8 @@ window.QT = window.QT || {};
 
   QT.Market = {
     UNIVERSE:UNIVERSE, BY_CODE:BY_CODE, QUOTES:QUOTES, TICK_SIZE:tick,
+    liveState:function (code) { return LIVE_STATE[code] || null; },
+    revision:function (code) { return REVISIONS[code] || 0; },
     init:init, daily:daily, series:series, aggregate:aggregate,
     applyTick:applyTick, snapshot:snapshot, lightQuote:lightQuote, isReal:isReal, hasData:hasData, onLate:onLate, barOpen:barOpen,
     setDaily:setDaily, realSource:realSource,

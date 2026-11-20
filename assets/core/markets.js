@@ -222,7 +222,7 @@ window.QT = window.QT || {};
     const m = benchMemo[k];
     if (m && m.sig === sig) return m.v;
     const it = get(k);
-    const v = it && it.h && it.h.length >= 2 ? { key:k, name:it.n, h:it.h, r:it.r, day:it.day, live:it.live } : null;
+    const v = it && it.h && it.h.length >= 2 ? { key:k, name:it.n, h:it.h, r:it.r, day:it.day, timestamp:it.t, live:it.live } : null;
     benchMemo[k] = { sig:sig, v:v };
     return v;
   }

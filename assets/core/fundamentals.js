@@ -214,7 +214,7 @@ window.QT = window.QT || {};
       items.push({ key:key, name:name, v:v, w:w, pts:pts, fmt:fmt, note:note, good:good });
     }
     if (fi) add('debt', '부채비율', debt, 0, null, fin(debt) ? Math.round(debt) + '%' : '—', '금융업은 예금·보험부채가 영업 자산이라 점수에서 제외', null);
-    else if (fin(debt)){
+    else if (fin(debt) && debt >= 0){
       const p = debt <= 50 ? 1 : debt <= 100 ? 0.85 : debt <= 150 ? 0.62 : debt <= 200 ? 0.42 : debt <= 300 ? 0.2 : 0.06;
       add('debt', '부채비율', debt, 30, p, Math.round(debt) + '%', debt <= 100 ? '100% 이하 — 안정' : debt <= 200 ? '100~200% — 보통' : '200% 초과 — 부채 부담', p >= 0.62);
     }
@@ -235,7 +235,7 @@ window.QT = window.QT || {};
     }
     let sw = 0, sp = 0;
     items.forEach(function (x) { if (x.w && x.pts != null){ sw += x.w; sp += x.w * x.pts; } });
-    const score = sw ? Math.round(sp / sw * 100) : null;
+    const score = fin(debt) && debt < 0 ? 0 : sw ? Math.round(sp / sw * 100) : null;
     const grade = score == null ? null : score >= 80 ? '매우 안정' : score >= 65 ? '안정' : score >= 45 ? '보통' : score >= 30 ? '주의' : '위험';
     const tone = score == null ? 'neut' : score >= 65 ? 'good' : score >= 45 ? 'neut' : 'bad';
     return { score:score, grade:grade, tone:tone, items:items, debt:debt, icr:icr, reserve:reserve, current:current,
@@ -384,12 +384,12 @@ window.QT = window.QT || {};
   function scoreOf(v, g, h){
     const parts = [];
     /* PER */
-    if (!fin(v.per)) parts.push({ key:'per', name:'PER 업종 대비', pts:0, max:25, note:'최근 4분기 적자 — PER 산출 불가' });
+    if (!fin(v.per)) parts.push({ key:'per', name:'PER 업종 대비', pts:0, max:25, note:fin(v.epsTTM) ? 'EPS가 0 이하 — PER 산출 불가' : 'EPS 자료 없음 — 판단 보류' });
     else if (fin(v.indPer)) parts.push({ key:'per', name:'PER 업종 대비', pts:ratioPts(v.per / v.indPer), max:25,
       note:v.per.toFixed(1) + '배 vs 업종 ' + v.indPer.toFixed(1) + '배 (' + pctGap(v.per, v.indPer) + ')' });
     else parts.push({ key:'per', name:'PER 수준', pts:v.per <= 8 ? 20 : v.per <= 12 ? 16 : v.per <= 20 ? 11 : v.per <= 30 ? 6 : 2, max:25, note:v.per.toFixed(1) + '배 (업종 비교값 없음 · 절대 수준)' });
     /* PBR */
-    if (!fin(v.pbr)) parts.push({ key:'pbr', name:'PBR 업종 대비', pts:0, max:25, note:'자본잠식 — PBR 산출 불가' });
+    if (!fin(v.pbr)) parts.push({ key:'pbr', name:'PBR 업종 대비', pts:0, max:25, note:fin(v.bps) ? 'BPS가 0 이하 — PBR 산출 불가' : 'BPS 자료 없음 — 판단 보류' });
     else {
       let pts, note;
       if (fin(v.indPbr)){ pts = ratioPts(v.pbr / v.indPbr); note = v.pbr.toFixed(2) + '배 vs ' + (v.pbrBasis || '업종') + ' ' + v.indPbr.toFixed(2) + '배 (' + pctGap(v.pbr, v.indPbr) + ')'; }
@@ -413,7 +413,8 @@ window.QT = window.QT || {};
 
     const raw = parts.reduce(function (s, p) { return s + p.pts; }, 0);
     const penalty = h.score == null ? 0 : h.score < 30 ? 10 : h.score < 45 ? 5 : 0;
-    return { score:clamp(raw - penalty, 0, 100), raw:raw, parts:parts, penalty:penalty,
+    const coverage = [fin(v.epsTTM), fin(v.bps), fin(v.roe), !!g.opYoY].filter(Boolean).length;
+    return { score:coverage === 4 ? clamp(raw - penalty, 0, 100) : null, coverage:coverage, raw:raw, parts:parts, penalty:penalty,
              penaltyNote:penalty ? '재무 건전성 ' + h.grade + ' (' + h.score + '점) — ' + penalty + '점 감점' : null };
   }
   function pctGap(a, b){ const d = (a / b - 1) * 100; return Math.abs(d).toFixed(0) + '% ' + (d <= 0 ? '할인' : '할증'); }

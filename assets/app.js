@@ -744,7 +744,7 @@
   /* ---------------- 용어 설명 (? 버튼) ---------------- */
   const GLOSS = {
     score:'종합 점수: 추세 · 모멘텀 · 거래량 지표를 −100~+100으로 합산합니다. 추세가 뚜렷할 때(ADX 높음)는 추세 지표 비중을, 횡보장에서는 과매수·과매도 지표 비중을 높입니다. 여기에 캔들(연속 음봉 · 양봉, 긴 꼬리, 장악형, 장대봉)과 추세추종(이동평균선 크로스 · 20일 채널 돌파) 신호를 각각 최대 ±10점 더합니다. 소속 지수가 급락 중이면 점수를 +54(매수)로 제한합니다. 등급은 지금의 추세 상태를 요약한 것이며 수익 예측이 아닙니다 — 과거 검증에서 등급과 10거래일 뒤 수익률 사이에 통계적으로 유의한 관계는 없었습니다.',
-    pos:'내 포지션: 입력한 평단가를 기준으로 손절선(평단가 − 2 ATR)과 익절선(평단가 + 3 ATR)을 긋고, 현재가가 손절선 이하면 매도·손절, 익절선 이상이면 매도·익절, 그 사이면 보유로 표시합니다. ATR은 최근 14일의 하루 평균 변동폭이라, 많이 움직이는 종목은 폭이 넓고 덜 움직이는 종목은 좁습니다(배수는 아래에서 조정). 추가 매수 가능은 ① 종합 의견이 매수 이상 ② 시장 급락이 아님 ③ 익절선까지 남은 폭이 손절선까지보다 큼, 세 가지를 모두 만족할 때만 나옵니다. 차트로 계산하는 종합 의견 등급은 평단가와 무관하게 그대로입니다. 과거 검증(국내 종목 · 상승장 구간)에서 기본 배수는 20거래일 안에 손절선에 먼저 닿은 경우 39%, 익절선 40%였고 평균 손익은 선 없이 그냥 보유한 것보다 낮았습니다 — 수익을 늘리는 규칙이 아니라 한 번의 손실 · 이익 폭을 미리 정해 두는 규칙입니다. 평단가는 이 브라우저에만 저장됩니다.',
+    pos:'내 포지션: 입력한 평단가를 기준으로 손절선(평단가 − 2 ATR)과 익절선(평단가 + 3 ATR)을 긋고, 현재가가 손절선 이하면 매도·손절, 익절선 이상이면 매도·익절, 그 사이면 보유로 표시합니다. ATR은 최근 14일의 하루 평균 변동폭이라, 많이 움직이는 종목은 폭이 넓고 덜 움직이는 종목은 좁습니다(배수는 아래에서 조정). 추가 매수 가능은 ① 종합 의견이 매수 이상 ② 시장 급락이 아님 ③ 익절선까지 남은 폭이 손절선까지보다 큼, 세 가지를 모두 만족할 때만 나옵니다. 차트로 계산하는 종합 의견 등급은 평단가와 무관하게 그대로입니다. 과거 검증(국내 종목 · 상승장 구간)에서 기본 배수는 20거래일 안에 손절선에 먼저 닿은 경우 39%, 익절선 40%였고 평균 손익은 선 없이 그냥 보유한 것보다 낮았습니다 — 수익을 늘리는 규칙이 아니라 한 번의 손실 · 이익 폭을 미리 정해 두는 규칙입니다. 평단가는 보호선은 처음 확인한 확정 ATR로 고정합니다. 손실·현금 한도를 입력하면 추가 가능 수량을 계산하며 비용·갭 손실은 별도입니다. 이 브라우저에만 저장됩니다.',
     market:'시장 반영: 종목 지표는 그 종목의 차트만 보기 때문에 시장 전체가 무너지는 날을 알 수 없습니다. 그래서 소속 지수(코스피 · 코스닥 종목은 해당 지수, 미국 종목은 나스닥 종합 · S&P 500 편입 종목은 S&P 500)가 하루 −2% 이하이거나 3거래일 누적 −3% 이하이면 시장 급락으로 보고 강력 매수를 내지 않습니다(점수 상한 +54). 국내 종목 과거 검증에서 강력 매수 종목이 다음 날 −5% 이상 빠진 비율이 평소 9%, 시장 급락 때 20%였습니다. 다만 10거래일 뒤 수익률은 낮지 않았습니다 — 하락 예측이 아니라 변동폭이 커진다는 경고이므로 매도로 내리지는 않습니다. ETF는 적용하지 않습니다.',
     rsi:'RSI(상대강도지수): 최근 14일 상승폭과 하락폭의 비율(0~100). 70 이상 과매수, 30 이하 과매도. 강한 상승 추세에서는 70 이상이 오래 이어지기도 합니다.',
     macd:'MACD: 12일과 26일 지수이동평균의 차이. 시그널선(9일 평균)을 위로 뚫으면 상승 힘이 붙는 것, 아래로 뚫으면 힘이 빠지는 것으로 봅니다.',
@@ -862,17 +862,25 @@
   /* 변동폭(ATR)은 실제 일봉에서 나와야 한다 — 분석 신뢰도가 낮으면(시뮬레이션 · 거래정지 · 봉 부족) 판단하지 않는다 */
   function posOf(st, a){
     const it = pos.items[st.code];
-    if (!it || !a || a.quality.level === 'low') return null;
-    const d = a.daily;
-    return PN.judge({ avg:it.avg, qty:it.qty, price:d.price, atr:d.atr, score:d.score, market:d.market, rule:pos.rule });
+    if (!it || !a) return null;
+    const d = a.daily, daily = M.daily(st.code);
+    const atr = d.ind.atr[daily.length - (d.open ? 2 : 1)];
+    if (a.quality.level !== 'low' && !(M.liveState(st.code) && M.liveState(st.code).mode === 'mock') && PN.protect(it, atr, pos.rule)) savePos();
+    if (!it.protection) return null;
+    const permission = QT.Signal.entry(st, daily, d.market);
+    if (a.quality.level === 'low') permission.allowed = false;
+    return PN.judge({ avg:it.avg, qty:it.qty, price:d.price, atr:it.protection.atr, score:d.open ? QT.Scoring.at(daily, d.ind, daily.length - 2).score : d.score, market:d.market, rule:pos.rule,
+      protection:it.protection, entry:permission, riskBudget:it.riskBudget, cash:it.cash });
   }
   function numIn(s){ const v = parseFloat(String(s == null ? '' : s).replace(/[^0-9.]/g, '')); return isFinite(v) && v > 0 ? v : null; }
   function posForm(st, it){
     return '<form class="pn-form" id="posn-form" autocomplete="off">' +
       '<label><span>평단가</span><input id="posn-avg" inputmode="decimal" placeholder="' + (st.cur === 'USD' ? '예: 182.50' : '예: 65,000') + '" value="' + (it ? plain(it.avg, st.cur) : '') + '"><em>' + (st.cur === 'USD' ? '달러' : '원') + '</em></label>' +
       '<label><span>수량</span><input id="posn-qty" inputmode="decimal" placeholder="선택" value="' + (it && it.qty ? it.qty : '') + '"><em>주</em></label>' +
+      '<label><span>이 종목 최대 계획손실 (' + st.cur + ')</span><input id="posn-risk" inputmode="decimal" value="' + (it && it.riskBudget || '') + '"></label>' +
+      '<label><span>추가 매수 현금 한도 (' + st.cur + ')</span><input id="posn-cash" inputmode="decimal" value="' + (it && it.cash || '') + '"></label>' +
       '<button type="submit" class="pn-btn primary">저장</button>' + (it ? '<button type="button" class="pn-btn" data-act="cancel">취소</button>' : '') + '</form>' +
-      '<p class="pn-hint">보유 종목의 평단가를 넣으면 그 가격을 기준으로 손절선 · 익절선과 매도 · 추가 매수 판단을 보여 줍니다. 종합 의견 등급은 그대로 함께 표시합니다. 이 브라우저에만 저장됩니다.' + tip('pos') + '</p>';
+      '<p class="pn-hint">보유 종목의 평단가를 넣으면 그 가격을 기준으로 손절선 · 익절선과 매도 · 추가 매수 판단을 보여 줍니다. 종합 의견 등급은 그대로 함께 표시합니다. 보호선은 처음 확인한 확정 ATR로 고정합니다. 손실·현금 한도를 입력하면 추가 가능 수량을 계산하며 비용·갭 손실은 별도입니다. 이 브라우저에만 저장됩니다.' + tip('pos') + '</p>';
   }
   function posCtl(){
     const step = function (k, name) {
@@ -897,18 +905,20 @@
         (a ? '이 종목은 일봉 데이터를 믿기 어려워 변동폭(ATR)으로 손절선 · 익절선을 긋지 않습니다.' : '시세 데이터가 없어 판단할 수 없습니다.') + '</p></div>' + posCtl();
     } else {
       const d = a.daily, t = a.targets, inside = j.action === 'add' || j.action === 'hold';
-      const say = j.action === 'cut' ? '현재가가 <b>손절선</b>(평단가 − ' + j.rule.stop + ' ATR) 아래입니다.'
-        : j.action === 'take' ? '현재가가 <b>익절선</b>(평단가 + ' + j.rule.take + ' ATR) 위입니다.'
+      const say = j.action === 'cut' ? '저장한 손절선 이탈을 확인했습니다. 실제 매도·체결 여부를 확인하세요.'
+        : j.action === 'take' ? '현재가가 저장한 <b>익절선</b> 위입니다.'
         : (j.action === 'add' ? '손절선과 익절선 사이이고 추가 매수 조건을 모두 충족합니다.' : '손절선과 익절선 사이입니다.') +
           (j.near === 'stop' ? ' <b>손절선까지 ' + pct1(j.stop.pct) + '</b> 남았습니다.' : j.near === 'take' ? ' <b>익절선까지 ' + pct1(j.take.pct) + '</b> 남았습니다.' : '');
       const mark = Math.max(0, Math.min(100, j.pos * 100)), av = j.avgPos * 100;
       /* 선을 이미 지났으면 '현재가에서 +5%' 가 아니라 얼마나 지났는지로 쓴다 */
       const gap = function (line, word) { return '현재가가 ' + Math.abs((j.price / line.v - 1) * 100).toFixed(1) + '% ' + word; };
-      const stopNote = j.action === 'cut' ? gap(j.stop, '아래') : '현재가에서 ' + pct1(j.stop.pct);
+      const stopNote = j.breach ? '최초 이탈 ' + price(j.breach.price, cur) + ' · ' + hhmmss(j.breach.ts) : j.action === 'cut' ? gap(j.stop, '아래') : '현재가에서 ' + pct1(j.stop.pct);
       const takeNote = j.action === 'take' ? gap(j.take, '위') : '현재가에서 ' + pct1(j.take.pct);
       const condText = {
         trend:'종합 의견이 매수 이상 <span class="muted">(지금 ' + d.verdict + ')</span>',
-        market:'시장 급락이 아님 <span class="muted">(' + (d.market ? mktText(d.market) : '지수 없음 — 판단에서 제외') + ')</span>',
+        market:'시장 급락·지속 하락이 없고 지수 확인됨',
+        data:'시세와 시장 데이터 확인 <span class="muted">' + QT.Signal.entry(st, M.daily(st.code), d.market).reasons.join(' · ') + '</span>',
+        budget:'보유 위험·현금 한도 충족 · 추가 가능 ' + j.addQty + '주 (비용 전)',
         room:'익절선까지 남은 폭이 손절선까지보다 큼 <span class="muted">(' + pct1(j.take.pct) + ' 대 ' + pct1(j.stop.pct) + ')</span>'
       };
       html = '<div class="pn-head"><span class="pchip ' + j.tone + '">' + j.label + '</span><p>' + say + tip('pos') + '</p></div>' +
@@ -950,13 +960,14 @@
     const hold = a.quality.level === 'low';
     $('#g-needle').setAttribute('transform', 'rotate(' + (hold ? 0 : a.score / 100 * 90).toFixed(1) + ' 132 128)');
     const gs = $('#g-score');
-    gs.textContent = hold ? '분석 신뢰도 낮음' : '기술적 점수 ' + (a.score > 0 ? '+' : '') + a.score + (a.capped ? ' · 종목만 +' + a.ownScore : '');
+    gs.textContent = hold ? '분석 신뢰도 낮음' : (a.open ? '잠정 기술점수 ' : '기술적 점수 ') + (a.score > 0 ? '+' : '') + a.score + (a.capped ? ' · 종목만 +' + a.ownScore : '');
     gs.style.color = hold ? '#B54708' : a.tone === 'bull' ? '#F04438' : a.tone === 'bear' ? '#3B82F6' : '#4E5968';
+    const entry = QT.Signal.entry(st, M.daily(st.code), a.daily.market);
     const v = $('#verdict');
-    v.textContent = hold ? '판단 보류' : a.verdict;
+    v.textContent = hold ? '판단 보류' : !entry.allowed && a.score >= 18 ? '신규 매수 보류' : a.verdict;
     v.className = 'verdict ' + (hold ? 'flat' : a.tone === 'bull' ? 'up' : a.tone === 'bear' ? 'down' : 'flat');
     const reg = a.regime === 'trend' ? '추세장' : a.regime === 'range' ? '횡보장' : a.regime === 'weak' ? '약한 추세' : '국면 판단 불가';
-    $('#verdict-why').innerHTML = hold ? a.quality.notes[0].text + tip('quality')
+    $('#verdict-why').innerHTML = !entry.allowed ? '신규 매수 보류 · ' + entry.reasons.join(' · ') : hold ? a.quality.notes[0].text + tip('quality')
       : '<span class="regime" data-r="' + a.regime + '">' + reg + (a.adx != null ? ' · ADX ' + a.adx.toFixed(0) : '') + '</span>' +
         a.rows.length + '개 지표 중 매수 ' + a.buy + ' · 매도 ' + a.sell + tip('score');
     paintMarket(a);
@@ -1080,7 +1091,7 @@
     const daily = M.daily(st.code);
     if (daily.length < 120) { bt = { key:null, sig:null, tgt:null, pending:false }; return; }
     const d = new Date(daily[daily.length - 1].t), mk = analysis && analysis.daily.market;
-    const key = st.code + '|' + daily.length + '|' + d.getFullYear() + d.getMonth() + d.getDate() + (mk && mk.risk ? '|' + mk.key : '');
+    const key = st.code + '|' + daily.length + '|' + d.getFullYear() + d.getMonth() + d.getDate() + '|' + (analysis && QT.Scoring.classOf(analysis.daily.score)) + '|' + M.barOpen(st.code, '1D') + '|' + (mk && mk.downtrend);
     if (bt.key === key) return;
     bt = { key:key, sig:null, tgt:null, pending:true };
     setTimeout(function () {
@@ -1117,6 +1128,8 @@
       else guide = '방향이 정해지지 않았습니다. <b>' + price(base.v, st.cur) + '</b> 위로 올라서면 상승, ' + (s1 ? '<b>' + price(s1.v, st.cur) + '</b> 아래로 내려가면 하락 신호로 보고 대응하세요.' : '지지선 이탈 시 하락 신호로 보고 대응하세요.');
     }
 
+    const permission = QT.Signal.entry(st, M.daily(st.code), d.market);
+    if (!permission.allowed) guide = '신규 매수 보류 · ' + permission.reasons.join(' · ');
     const obvC = d.rows.filter(function (r) { return r.key === 'obv'; })[0];
     const checks = [
       [d.ma20 != null && p > d.ma20, '주가가 20일선 위', 'ma'],
@@ -1467,13 +1480,13 @@
 
   /* ---------------- 로드 · 렌더 ---------------- */
   let mktSig = '';
-  function mktSigOf(m){ return m ? m.key + '|' + m.day + '|' + m.d1.toFixed(1) + '|' + (m.d3 != null ? m.d3.toFixed(1) : '') + '|' + m.risk : ''; }
+  function mktSigOf(m){ return m ? m.key + '|' + m.day + '|' + m.d1.toFixed(1) + '|' + (m.d3 != null ? m.d3.toFixed(1) : '') + '|' + m.risk + '|' + m.downtrend : ''; }
   function computeAnalysis(){
     ind = QT.Indicators.set(bars);
     const daily = M.daily(state.code);
     const wm = state.tf === '1W' || state.tf === '1M', analysisBars = wm ? bars : daily;
     analysis = A.run(analysisBars, M.BY_CODE[state.code], daily, {
-      open:M.barOpen(state.code, wm ? state.tf : '1D'), dailyOpen:M.barOpen(state.code, '1D'), real:M.isReal(state.code),
+      open:M.barOpen(state.code, wm ? state.tf : '1D'), dailyOpen:M.barOpen(state.code, '1D'), real:M.isReal(state.code) && !(M.liveState(state.code) && M.liveState(state.code).mode === 'mock'), now:Date.now(),
       market:benchOf(M.BY_CODE[state.code])
     });
     mktSig = mktSigOf(analysis.market);
@@ -1485,7 +1498,7 @@
     const was = analysis.market, mk = benchOf(M.BY_CODE[state.code]), last = bars[bars.length - 1];
     const now = mk && last ? QT.Scoring.marketAt(mk, QT.Scoring.dayOf(last.t), true) : null;
     if (mktSigOf(now) === mktSig) return;
-    if (was && now && !was.risk && !now.risk){
+    if (was && now && !was.risk && !now.risk && was.downtrend === now.downtrend){
       analysis.market = analysis.daily.market = now; mktSig = mktSigOf(now);
       paintMarket(analysis);
       return;
@@ -1561,9 +1574,12 @@
     realDaily[code] = true;
     return M.ensureDaily(code).then(function () {
       const krx = M.hasKrx(code) && M.isReal(code) && /^krx/.test(M.realSource(code) || '');
+      const startedAt = Date.now();
       return QT.Feed.fetchCandles(code, '1d', krx ? 20 : 400).then(function (list) {
-        if (!(krx ? M.appendDaily(code, list, 'toss') : M.setDaily(code, list, 'toss'))) return;
+        if (!(krx ? M.appendDaily(code, list, 'toss', startedAt) : M.setDaily(code, list, 'toss', startedAt))) return;
         if (code === state.code && state.tf !== '1m' && state.tf !== '5m') loadSymbol(false);
+        const held = pos.items[code], daily = M.daily(code), index = daily.length - (M.barOpen(code, '1D') ? 2 : 1);
+        if (held && daily.length && Date.now() - daily[daily.length - 1].t <= 5 * 86400000 && PN.protect(held, QT.Indicators.set(daily).atr[index], pos.rule)) savePos();
         refreshRowPrices();
       });
     }).catch(function (e) {
@@ -1586,7 +1602,7 @@
   }
   /* 관심종목도 전일 대비가 맞도록 한 종목씩 차례로 받는다 (차트 API 초당 20회 한도) */
   function loadRealDailyAll(){
-    state.watchlist.reduce(function (p, code) {
+    Object.keys(pos.items).concat(state.watchlist).reduce(function (p, code) {
       return p.then(function () { return loadRealDaily(code); });
     }, loadRealDaily(state.code));
   }
@@ -1781,7 +1797,10 @@
     e.preventDefault();
     const avg = numIn($('#posn-avg').value), qty = numIn($('#posn-qty').value);
     if (!avg){ $('#posn-form').classList.add('err'); $('#posn-avg').focus(); return; }
-    pos.items[state.code] = qty ? { avg:avg, qty:qty } : { avg:avg };
+    const previous = pos.items[state.code] || {};
+    pos.items[state.code] = Object.assign({}, previous, { avg:avg, qty:qty,
+      riskBudget:numIn($('#posn-risk').value), cash:numIn($('#posn-cash').value) });
+    subscribeAll();
     savePos(); posEdit = null; refreshPosition();
   });
   $('#posn').addEventListener('click', function (e) {
@@ -1789,10 +1808,14 @@
     const act = b.dataset.act;
     if (act === 'edit') posEdit = state.code;
     else if (act === 'cancel') posEdit = null;
-    else if (act === 'del'){ delete pos.items[state.code]; savePos(); posEdit = null; }
+    else if (act === 'del'){ delete pos.items[state.code]; savePos(); posEdit = null; subscribeAll(); }
     else {
       const k = act.slice(0, -1);                     // stop- · stop+ · take- · take+
       pos.rule[k] = PN.mult(pos.rule[k] + (act.slice(-1) === '+' ? 1 : -1) * PN.RULE.step, pos.rule[k]);
+      Object.keys(pos.items).forEach(function (code) {
+        const item = pos.items[code], protection = item.protection;
+        if (protection && k === 'stop') protection.stop = Math.max(protection.stop, item.avg - pos.rule.stop * protection.atr);
+      });
       savePos();
     }
     refreshPosition();
@@ -1806,13 +1829,13 @@
     /** @param list [{code, avg, qty}]  @param opt { watch: 관심종목에도 추가, replace: 목록에 없는 기존 평단가 삭제 } */
     apply:function (list, opt) {
       const keep = {};
-      list.forEach(function (x) { pos.items[x.code] = x.qty ? { avg:x.avg, qty:x.qty } : { avg:x.avg }; keep[x.code] = true; });
+      list.forEach(function (x) { pos.items[x.code] = Object.assign({}, pos.items[x.code], { avg:x.avg, qty:x.qty || null }); keep[x.code] = true; });
       let removed = 0, added = 0;
       if (opt.replace) Object.keys(pos.items).forEach(function (c) { if (!keep[c]){ delete pos.items[c]; removed++; } });
       savePos();
       if (opt.watch) list.forEach(function (x) { if (!inWL(x.code)){ state.watchlist.push(x.code); added++; } });
       if (added){ saveWL(); renderList(); subscribeAll(); syncStar(); }
-      posEdit = null; refreshPosition();
+      subscribeAll(); posEdit = null; refreshPosition();
       toast(list.length + '종목의 평단가를 저장했습니다' + (removed ? ' · ' + removed + '종목 삭제' : '') + (added ? ' · 관심종목 ' + added + '개 추가' : ''));
     }
   });
@@ -1960,14 +1983,13 @@
 
   /* ---------------- 피드 ---------------- */
   function subscribeAll(){
-    const codes = state.watchlist.slice();
-    if (codes.indexOf(state.code) < 0) codes.push(state.code);
+    const codes = Array.from(new Set(Object.keys(pos.items).concat([state.code], state.watchlist)));
     QT.Feed.subscribe(codes);
     loadRealDailyAll();
   }
   const FEED_TEXT = { live:'실시간 수신 중', mock:'모의 시세 (데모)', connecting:'연결 중', error:'연결 실패', static:'종가 기준' };
   QT.Feed.on('status', function (s) {
-    if (s.mode === 'live') loadRealDailyAll();
+    if (s.mode === 'live') { Object.keys(realDaily).forEach(function (code) { delete realDaily[code]; }); loadRealDailyAll(); }
     const pill = $('#feed-pill'), tag = $('#live-tag');
     pill.dataset.mode = s.mode;
     $('#feed-text').textContent = s.mode === 'live' ? '실시간' : s.mode === 'static' ? '공공데이터' : FEED_TEXT[s.mode] || s.mode;
@@ -1985,14 +2007,22 @@
   });
 
   setInterval(tickHero, 1000);
-  let dirty = false, lastPanel = 0;
-  QT.Feed.on('tick', function (t) { if (t.code === state.code) dirty = true; });
+  let dirty = false, lastPanel = 0, lastReconcile = 0, lastPermissionPaint = 0;
+  QT.Feed.on('tick', function (t) {
+    const item = pos.items[t.code], live = M.liveState(t.code);
+    if (live && live.mode !== 'mock' && PN.observe(item, t)) savePos();
+    if (t.code === state.code) dirty = true;
+  });
   setInterval(function () {
     if (document.hidden) return;
     const now = Date.now();
+    if (QT.Feed.canFetchCandles() && now - lastReconcile > 60000) {
+      lastReconcile = now; Object.keys(realDaily).forEach(function (code) { delete realDaily[code]; }); loadRealDailyAll();
+    }
     if (QT.Screener && QT.Screener.cfg.on) QT.Screener.tick($('#wl'), state.tab, state.mkt, state.watchlist);
     else refreshRowPrices();
     if (dirty && now - lastPanel > 1000){ dirty = false; lastPanel = now; refreshLive(); }
+    if (analysis && now - lastPermissionPaint > 10000) { lastPermissionPaint = now; renderAnalysis(); }
     const at = QT.Feed.lastTickAt;
     $('#live-tag-time').textContent = feedMode() === 'static' ? lastBarDay() : at ? hhmmss(at) : '--:--:--';
     const ago = at ? Math.round((now - at) / 1000) : null;

@@ -55,7 +55,7 @@ window.QT = window.QT || {};
     }).join('') + (extra || '');
   }
   function signalCard(st, a, fa, t){
-    const c = S.combine(t, fa);
+    const c = S.combine(t, fa), entry = S.entry(st, M.daily(st.code), a && a.daily && a.daily.market);
     const techPts = t ? t.score : null, fundPts = fa ? fa.score : null;
     const tags = (fa ? fa.tags : []).concat(t ? t.tags : []).sort(function (x, y) { return y.w - x.w; });
     const tgt = a && a.targets && M.isReal(st.code) ? a.targets.mid.base : null;     // 시뮬레이션 경로의 목표가는 쓰지 않는다
@@ -67,6 +67,7 @@ window.QT = window.QT || {};
     else head = badge(one ? one[2] : null) + '<div class="sg-score"><b class="num">' + (one ? one[1] : '—') + '</b><span>/ 100' + (one ? ' · ' + one[3] : '') + '</span></div>';
     const up = fa && fa.fv && fin(fa.fv.upside) ? fa.fv.upside : null;
     return '<div class="card-hd"><i data-lucide="radar"></i><h2>종합 매수 신호</h2><span class="sub">기술 50% + 재무 50%' + ctx.tip('signal') + '</span></div>' +
+      (!entry.allowed ? '<p class="sg-mk">신규 매수 보류 · ' + entry.reasons.join(' · ') + '</p>' : '') +
       '<div class="sg">' +
         '<div class="sg-top">' + head + '</div>' +
         scaleBar(shown) +
@@ -78,7 +79,7 @@ window.QT = window.QT || {};
               (t.marketCut ? '<div class="pt pen"><span class="pt-n">시장 급락 상한</span><span></span><b class="num down">−' + t.marketCut + '</b><small class="pt-note">' + mkLine(t.market) + ' — 강력 매수를 내지 않습니다</small></div>' : ''))
                : '<p class="muted sm">실제 일봉이 부족해 계산하지 않았습니다.</p>') + '</div>' +
           '<div class="sg-half"><div class="sg-h"><span>재무 점수</span>' + badge(c.fundGrade, fundPts, true) + '</div>' +
-            (fa ? partRows(fa.scoring.parts, fa.scoring.penalty ? '<div class="pt pen"><span class="pt-n">재무 위험 감점</span><span></span><b class="num down">−' + fa.scoring.penalty + '</b><small class="pt-note">' + fa.scoring.penaltyNote + '</small></div>' : '')
+            (fa ? (fa.score == null ? '<p class="muted sm">재무 필수 항목 ' + fa.scoring.coverage + '/4 확인 · 종합 판단 보류</p>' : '') + partRows(fa.scoring.parts, fa.scoring.penalty ? '<div class="pt pen"><span class="pt-n">재무 위험 감점</span><span></span><b class="num down">−' + fa.scoring.penalty + '</b><small class="pt-note">' + fa.scoring.penaltyNote + '</small></div>' : '')
                : '<p class="muted sm">재무 데이터가 수집되지 않은 종목입니다' + (st.type === 'etf' ? ' (ETF)' : '') + '.</p>') + '</div>' +
         '</div>' +
         (tags.length ? '<div class="vtags">' + tagChips(tags.filter(function (x) { return x.tone === 'good'; }), 5) + tagChips(tags.filter(function (x) { return x.tone === 'bad'; }), 3) + '</div>' : '') +
@@ -102,7 +103,7 @@ window.QT = window.QT || {};
     const g = c.total != null ? c.grade : c.fundGrade;
     const verdict = c.total != null
       ? '기술(' + c.techRaw + ')과 재무(' + c.fund + ')를 합친 종합 점수는 <b>' + c.total + '점 · ' + g.label + '</b>입니다.' + (c.total !== c.own ? ' 합계는 ' + c.own + '점이지만 시장 급락 중에는 강력 매수를 내지 않아 ' + c.total + '점으로 제한했습니다.' : '')
-      : '재무 점수만으로는 <b>' + fa.score + '점 · ' + g.label + '</b>입니다.';
+      : g ? '재무 점수만으로는 <b>' + fa.score + '점 · ' + g.label + '</b>입니다.' : '재무 필수 항목이 부족해 종합 판단을 보류합니다.';
     return '<div class="card-hd"><i data-lucide="sparkles"></i><h2>AI 가치분석 요약</h2><span class="sub">' + (fa.asOf ? String(fa.asOf).slice(0, 10) + ' 재무 수집' : '') + '</span></div>' +
       '<div class="vsum">' +
         '<div class="vsum-head">' + badge(g) + '<p>' + verdict + '</p></div>' +
@@ -509,7 +510,8 @@ window.QT = window.QT || {};
   function techOf(code, a){
     if (!a || !a.daily || !M.isReal(code)) return null;
     if (a.quality && a.quality.level === 'low') return null;       // 거래정지 · 봉 부족 — 스크리너(signal.js)와 같은 기준
-    return S.tech(M.daily(code), a.daily.ind, a.daily.market, { open:a.daily.open });
+    const daily = M.daily(code), confirmed = a.daily.open ? daily.slice(0, -1) : daily;
+    return S.tech(confirmed, QT.Indicators.set(confirmed), a.daily.market, { open:false });
   }
   function render(force){
     const el = $('#panel-value'), st = view.st, a = view.a;
@@ -568,7 +570,8 @@ window.QT = window.QT || {};
     const g = c.total != null ? c.grade : c.techGrade || c.fundGrade;
     el.hidden = !g;
     if (!g) return;
-    el.innerHTML = '<span class="cs-l">종합 매수 신호</span>' + badge(g, c.total != null ? c.total : c.tech != null ? c.tech : c.fund, true) +
+    const permission = S.entry(st, M.daily(st.code), a && a.daily && a.daily.market);
+    el.innerHTML = '<span class="cs-l">' + (!permission.allowed ? '신규 매수 보류' : '종합 매수 신호') + '</span>' + badge(g, c.total != null ? c.total : c.tech != null ? c.tech : c.fund, true) +
       '<span class="cs-d">' + (c.capped ? '시장 급락 · ' : '') + (c.total != null ? '기술 ' + techTxt(c) + ' · 재무 ' + c.fund : c.tech != null ? '기술만 · 재무 데이터 없음' : M.isReal(st.code) ? '재무만 · 기술 분석 신뢰도 낮음' : '재무만 · 실제 일봉 없음') + '</span><i data-lucide="chevron-right"></i>';
   }
 

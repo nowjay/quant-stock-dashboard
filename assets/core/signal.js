@@ -151,6 +151,31 @@ window.QT = window.QT || {};
              market:t ? t.market : null, capped:!!t && (t.marketCut > 0 || total !== own) };
   }
 
+  /** 신규 위험을 늘릴 수 있는지 평가. 점수와 매매 허용 여부를 함께 표시한다. */
+  function entry(st, bars, market, now){
+    now = now || Date.now();
+    const M = QT.Market, reasons = [], last = bars && bars[bars.length - 1];
+    const live = M.liveState && M.liveState(st.code), feed = QT.Feed;
+    const realtime = feed && feed.getConfig().provider !== 'static';
+    if (!last || !M.isReal(st.code)) reasons.push('실제 일봉 없음');
+    else if (now - last.t > 5 * 86400000) reasons.push('일봉이 5일 이상 지연됨');
+    if (bars && bars.length && QT.Analysis.quality(bars, { real:M.isReal(st.code), now:now, stock:st.type !== 'index' }).level === 'low') reasons.push('일봉 품질 확인 필요');
+    if (live && live.mode === 'mock') reasons.push('모의 시세');
+    if (realtime && (!live || now - live.ts > 30000 || live.ts > now + 5000 || now - live.receivedAt > 30000)) reasons.push('종목 시세 수신 확인 필요');
+    if (realtime && live && (live.mode !== 'trade' || live.uncertain)) reasons.push('체결·거래량 복구 확인 필요');
+    if (feed && realtime && feed.status.mode !== 'live') reasons.push('실시간 연결 확인 필요');
+    if (st.type !== 'etf') {
+      if (!market || QT.Scoring.dayOf(now - 5 * 86400000) > market.day) reasons.push('시장 지수 확인 필요');
+      else {
+        if (market.historyGap) reasons.push('시장 지수 이력 공백');
+        if (market.risk) reasons.push('시장 급락 중');
+        if (market.downtrend) reasons.push('시장 지속 하락 중');
+        if (realtime && (!market.timestamp || now - market.timestamp > 120000)) reasons.push('시장 지수가 2분 이상 지연됨');
+      }
+    }
+    return { allowed:reasons.length === 0, reasons:reasons };
+  }
+
   /* ---------------- 스크리너 평가 (종목별 캐시) ---------------- */
   const cache = {};
   function evaluate(code){
@@ -161,32 +186,35 @@ window.QT = window.QT || {};
     /* 지수는 30초마다 움직이지만 점수를 바꾸는 것은 급락 여부뿐 — 그 여부가 바뀔 때만 다시 계산한다 */
     const mk = QT.Markets && QT.Markets.benchmark ? QT.Markets.benchmark(st) : null;
     const ms = mk ? QT.Scoring.marketAt(mk, null, true) : null;
-    let key = code + '|' + (price || 0) + '|' + real + '|' + open + '|' + (QT.Fund ? QT.Fund.meta().updated : '') + '|' + (ms && ms.risk ? ms.key : '');
+    let key = code + '|' + (price || 0) + '|' + real + '|' + open + '|' + (QT.Fund ? QT.Fund.meta().updated : '') + '|' + JSON.stringify(ms) + '|' + Math.floor(Date.now() / 10000) + '|' + M.revision(code);
     let d = null;
     if (real){
       d = M.daily(code);
-      if (d.length) key += '|' + d.length + '|' + d[d.length - 1].t + '|' + d[d.length - 1].c;
+      if (d.length) key += '|' + d.length + '|' + d[d.length - 1].t + '|' + d[d.length - 1].c + '|' + d[d.length - 1].h + '|' + d[d.length - 1].l + '|' + d[d.length - 1].v;
     }
     const c = cache[code];
     if (c && c.key === key) return c.v;
 
     /* 거래정지 · 무거래 등으로 지표가 성립하지 않는 종목은 기술 점수를 내지 않는다 (추천 목록에서 빠짐) */
     let t = null, tgt = null;
-    const ql = real && d && d.length ? QT.Analysis.quality(d, { real:true }) : null;
+    const ql = real && d && d.length ? QT.Analysis.quality(d, { real:true, now:Date.now(), stock:st.type !== 'index' }) : null;
     if (real && d && d.length >= 60 && ql.level !== 'low'){
       try {
-        const core = QT.Analysis.core(d, st.cur, { open:open, market:mk });
-        t = tech(d, core.ind, core.market, { open:open });
-        const T = QT.Targets && QT.Targets.build(d, core, st);
+        const confirmed = open ? d.slice(0, -1) : d;
+        const core = QT.Analysis.core(confirmed, st.cur, { market:mk });
+        t = tech(confirmed, core.ind, ms, { open:false });
+        const T = QT.Targets && QT.Targets.build(confirmed, core, st);
         if (T && T.mid && T.mid.base) tgt = { v:T.mid.base.v, pct:T.mid.base.pct };
       } catch (e) { console.warn('[QT] 스크리너 기술 분석 실패', code, e); }
     }
     const f = QT.Fund && price ? QT.Fund.analyze(code, price) : null;
     const v = { code:code, st:st, price:price, rate:q ? q.rate : 0, real:real, tech:t, fund:f, target:tgt, quality:ql, combo:combine(t, f) };
+    v.entry = entry(st, d, ms);
+    if (ql && ql.level === 'low') { v.entry.allowed = false; v.entry.reasons.push('일봉 품질 확인 필요'); }
     cache[code] = { key:key, v:v };
     return v;
   }
   function invalidate(code){ if (code) delete cache[code]; else Object.keys(cache).forEach(function (k) { delete cache[k]; }); }
 
-  QT.Signal = { tech:tech, combine:combine, grade:grade, GRADES:GRADES, MARKET_CAP:MARKET_CAP, evaluate:evaluate, invalidate:invalidate };
+  QT.Signal = { tech:tech, combine:combine, grade:grade, GRADES:GRADES, MARKET_CAP:MARKET_CAP, entry:entry, evaluate:evaluate, invalidate:invalidate };
 })(window.QT);
